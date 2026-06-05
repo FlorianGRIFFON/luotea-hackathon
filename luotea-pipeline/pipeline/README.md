@@ -2,7 +2,9 @@
 
 Medallion-style data pipeline (Bronze → Silver → Gold) for the Luotea Hackathon 2026 project.
 
-See [data-pipeline-plan.md](../docs/data-pipeline-plan.md) and [AGENT_PROMPT.md](../docs/AGENT_PROMPT.md) for architecture, phases, and implementation order.
+**Start here:** [PIPELINE_OVERVIEW.md](../docs/PIPELINE_OVERVIEW.md) — what the pipeline is, why we built it, and what it enables.
+
+See also [data-pipeline-plan.md](../docs/data-pipeline-plan.md) and [AGENT_PROMPT.md](../docs/AGENT_PROMPT.md) for architecture and implementation details.
 
 Raw hackathon source files live in `../Luotea-Hackathon-2026/`; pipeline code and runtime data live in this project folder.
 
@@ -16,6 +18,14 @@ pip install -e ".[dev]"
 ```
 
 Ensure hackathon data is present at `../Luotea-Hackathon-2026/` (alarms, work orders, Smartti JSON, KONE JSON, utilization CSVs).
+
+## QA gate (recommended)
+
+```bash
+python -m pipeline qa --date 2026-06-05
+```
+
+Runs ingest → silver → gold → validate and writes `data/qa/qa_report_{date}.json`.
 
 ## Full pipeline run
 
