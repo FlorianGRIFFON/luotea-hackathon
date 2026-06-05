@@ -1,0 +1,149 @@
+# Canonical site mapping — cross-source location graph
+# Links ERP customer/site numbers, Smartti property IDs, and KONE building names
+# to a single canonical_site_id used in Silver/Gold layers.
+schema_version: "0.1.0"
+default_timezone: Europe/Helsinki
+
+# Mapping policy:
+# - Rows without a match emit site_id = NULL and mapping_status = 'unmapped' (never dropped)
+# - ERP sites use customer_no + customer_site_no as composite key
+# - Smartti uses property_id (internal) and file_slug (filename stem)
+# - KONE uses kone_building (display name from export filename)
+
+sites:
+  # --- Valmet ERP sites (real customer data) ---
+
+  - canonical_site_id: site_valmet_l11
+    display_name: Lentokentänkatu 11
+    customer_name: Valmet Technologies Oy
+    address: Lentokentänkatu 11, 33900 Tampere
+    city: Tampere
+    country: FI
+    timezone: Europe/Helsinki
+    erp:
+      customer_no: 100000413
+      customer_site_no: 998389833
+    smartti:
+      property_id: null
+      file_slug: null
+    kone:
+      building_name: null
+    data_sources: [erp_alarms, erp_work_orders, erp_maintenance_plans, cleaning_utilization]
+    notes: Primary cross-domain demo site — ERP + room utilization
+
+  - canonical_site_id: site_valmet_venttiilitehdas
+    display_name: Venttiilitehdas
+    customer_name: Valmet Flow Control Oy
+    address: Vanha Porvoontie 229, 01380 Vantaa
+    city: Vantaa
+    country: FI
+    timezone: Europe/Helsinki
+    erp:
+      customer_no: 100279959
+      customer_site_no: 999154922
+    smartti:
+      property_id: null
+      file_slug: null
+    kone:
+      building_name: null
+    data_sources: [erp_alarms, erp_work_orders, erp_maintenance_plans]
+
+  - canonical_site_id: site_valmet_toimistotalo
+    display_name: Toimistotalo
+    customer_name: Valmet Flow Control Oy
+    address: Vanha Porvoontie 229, 01380 Vantaa
+    city: Vantaa
+    country: FI
+    timezone: Europe/Helsinki
+    erp:
+      customer_no: 100279959
+      customer_site_no: 999488386
+    smartti:
+      property_id: null
+      file_slug: null
+    kone:
+      building_name: null
+    data_sources: [erp_alarms, erp_work_orders]
+
+  - canonical_site_id: site_valmet_std
+    display_name: STD tehdas
+    customer_name: Valmet Flow Control Oy
+    address: Vanha Porvoontie 229, 01380 Vantaa
+    city: Vantaa
+    country: FI
+    timezone: Europe/Helsinki
+    erp:
+      customer_no: 100279959
+      customer_site_no: 999530754
+    smartti:
+      property_id: null
+      file_slug: null
+    kone:
+      building_name: null
+    data_sources: [erp_alarms, erp_work_orders, erp_maintenance_plans]
+    aliases: [Wharehouse]  # 3 alarm events use this site name with same site_no
+
+  # --- NovaProp anonymized sites (Smartti + KONE, no ERP) ---
+
+  - canonical_site_id: site_aurora
+    display_name: Aurora House
+    customer_name: NovaProp
+    address: Innovation Drive 14, Northville
+    city: Northville
+    country: FI
+    timezone: Europe/Helsinki
+    erp:
+      customer_no: null
+      customer_site_no: null
+    smartti:
+      property_id: property_mh4lo676jel77ozrjskgv54a
+      file_slug: aurora_house
+    kone:
+      building_name: Aurora House
+    data_sources: [smartti_pulse, kone_occupancy]
+
+  - canonical_site_id: site_meridian
+    display_name: Meridian Tower
+    customer_name: NovaProp
+    address: Solar Avenue 3, Coastview
+    city: Coastview
+    country: FI
+    timezone: Europe/Helsinki
+    erp:
+      customer_no: null
+      customer_site_no: null
+    smartti:
+      property_id: property_gx062pibthf0vv0u8pz4ndsz
+      file_slug: meridian_tower
+      child_property_ids:
+        - property_dux50ein7f9rb6ns46j8kj9p  # Rakennus 1
+        - property_qa0ar8n9881vc1fmqayz3d9i  # Rakennus 2
+        - property_mv55w0a8x6871lrimok5a1wt  # Rakennus 3
+    kone:
+      building_name: Meridian Tower
+    data_sources: [smartti_pulse, kone_occupancy]
+    notes: Smartti parent has automation data; children have per-building energy
+
+  - canonical_site_id: site_horizon
+    display_name: Horizon Plaza
+    customer_name: NovaProp
+    address: Central Square 26, Lakeside
+    city: Lakeside
+    country: FI
+    timezone: Europe/Helsinki
+    erp:
+      customer_no: null
+      customer_site_no: null
+    smartti:
+      property_id: property_or7o58m7wj02ockfr11xx5xu
+      file_slug: horizon_plaza
+    kone:
+      building_name: Horizon Plaza
+    data_sources: [smartti_pulse, kone_occupancy]
+
+# Lookup helpers (used by Silver dim_site enrichment)
+lookup:
+  erp_site_key: "{customer_no}:{customer_site_no}"
+  smartti_property_id: property_id
+  smartti_file_slug: file_slug
+  kone_building: building_name

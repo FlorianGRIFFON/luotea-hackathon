@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "luotea-pipeline"
+version = "0.1.0"
+description = "Luotea Hackathon 2026 data pipeline (Bronze → Silver → Gold)"
+readme = "pipeline/README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "polars",
+    "pyarrow",
+    "duckdb",
+    "pyyaml",
+    "pydantic>=2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+]
+
+[project.scripts]
+pipeline = "pipeline.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["pipeline*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "integration: full pipeline QA tests on real hackathon data",
+]

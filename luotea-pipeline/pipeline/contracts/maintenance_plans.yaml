@@ -1,0 +1,143 @@
+# Data contract: Luotea ERP scheduled maintenance plans (EH-työt)
+# Spec: Luotea-Hackathon-2026/Maintenance schedule (EH-työt)/scheduled_maintenance_plans_data_spec.md
+# Verified against: Scheduled maitenance plans.csv (note intentional filename typo)
+schema_version: "0.1.0"
+source_system: erp_maintenance_plans
+source_file: Luotea-Hackathon-2026/Maintenance schedule (EH-työt)/Scheduled maitenance plans.csv
+spec_doc: Luotea-Hackathon-2026/Maintenance schedule (EH-työt)/scheduled_maintenance_plans_data_spec.md
+
+ownership:
+  system: Luotea ERP (preventive maintenance)
+  refresh_cadence: batch_export
+  pii_rules:
+    contains_pii: false
+    anonymization: none
+
+format:
+  type: csv
+  encoding: utf-8-sig
+  delimiter: ","
+  quote_char: '"'
+  has_header: true
+  row_count_expected: 316
+  column_count: 22
+
+grain:
+  description: One row per maintenance plan entry (may duplicate PM_NO in export)
+  primary_key: [PM_NO]  # dedupe required — same PM_NO appears ~3× per spec
+  dedupe:
+    key: PM_NO
+    strategy: keep_latest_by
+    order_by: LAST_UPDATED
+
+keys:
+  primary: PM_NO
+  foreign:
+    - columns: [CUSTOMER_NO, CUSTOMER_SITE_NO, CUSTOMER_WORKSITE_NO]
+      references: dim_site.erp_keys
+    - column: PM_NO
+      referenced_by: work_orders.PM_NO
+
+columns:
+  LAST_UPDATED:
+    type: datetime
+    nullable: false
+    format: "YYYY-MM-DD HH:MM:SS.fff"
+    timezone: Europe/Helsinki
+  PM_NO:
+    type: string
+    nullable: false
+    description: Maintenance plan number; 106 unique values in 316 rows
+  MCH_CODE_CONTRACT:
+    type: string
+    nullable: false
+    enum: [KH, KT]
+  CUSTOMER_WORKSITE_NO:
+    type: string
+    nullable: false
+  CUSTOMER_NO:
+    type: integer
+    nullable: false
+  customer_name:
+    type: string
+    nullable: false
+  CUSTOMER_SITE_NO:
+    type: integer
+    nullable: false
+  customer_site_name:
+    type: string
+    nullable: false
+  site_address:
+    type: string
+    nullable: false
+  ACTION_DESCR:
+    type: string
+    nullable: false
+    language: fi
+  ACTION_DESCR_ENG:
+    type: string
+    nullable: false
+  PRIORITY_ID:
+    type: integer
+    nullable: false
+    enum: [2, 3, 5]
+  INTERVAL:
+    type: integer
+    nullable: true
+  PM_INTERVAL_UNIT:
+    type: string
+    nullable: true
+    enum: [Day, Week, Month, Year, null]
+  LAST_CHANGED:
+    type: datetime
+    nullable: false
+    timezone: Europe/Helsinki
+  PLAN_HRS:
+    type: decimal
+    nullable: true
+  DESCRIPTION:
+    type: string
+    nullable: true
+    language: fi
+  DESCRIPTION_ENG:
+    type: string
+    nullable: true
+  START_DATE:
+    type: datetime
+    nullable: true
+    timezone: Europe/Helsinki
+  REV_CRE_DATE:
+    type: datetime
+    nullable: false
+    timezone: Europe/Helsinki
+  VALID_FROM:
+    type: datetime
+    nullable: true
+    timezone: Europe/Helsinki
+  OBJSTATE:
+    type: string
+    nullable: false
+    enum: [Active, Obsolete]
+
+sites_in_dataset:
+  - customer_no: 100000413
+    customer_site_no: 998389833
+    name: Lentokentänkatu 11
+  - customer_no: 100279959
+    customer_site_no: 999154922
+    name: Venttiilitehdas
+  - customer_no: 100279959
+    customer_site_no: 999530754
+    name: STD tehdas
+
+quality_checks:
+  - name: pm_no_deduped_unique
+    type: uniqueness
+    columns: [PM_NO]
+    after: dedupe
+  - name: objstate_enum
+    type: enum
+    column: OBJSTATE
+    allowed: [Active, Obsolete]
+
+silver_target: fact_maintenance_plan

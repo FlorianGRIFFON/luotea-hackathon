@@ -1,0 +1,228 @@
+# Data contract: Luotea ERP work orders (anonymized)
+# Spec: Luotea-Hackathon-2026/Work orders/work_orders_data_spec 1.md
+# Verified against: Luotea-Hackathon-2026/Work orders/work_orders_anonymized 1.csv
+schema_version: "0.1.0"
+source_system: erp_work_orders
+source_file: Luotea-Hackathon-2026/Work orders/work_orders_anonymized 1.csv
+spec_doc: Luotea-Hackathon-2026/Work orders/work_orders_data_spec 1.md
+
+ownership:
+  system: Luotea ERP (facility management)
+  refresh_cadence: batch_export
+  pii_rules:
+    contains_pii: true  # anonymized in place
+    anonymization: token_replacement
+    preserve_tokens: ["[NAME]", "[PHONE]", "[EMAIL]"]
+    pii_columns: [WORK_DESCRIPTION, WORK_ORDER_DESCRIPTION, WORK_ORDER_PERFORMED_ACTION]
+
+format:
+  type: csv
+  # SPEC says comma + UTF-8 BOM; actual file differs:
+  encoding: cp1252  # Windows-1252 — NOT valid UTF-8 (byte 0xf6 = ö)
+  delimiter: ";"  # semicolon — NOT comma as spec states
+  quote_char: '"'
+  has_header: true
+  row_count_expected: 44265
+  column_count: 33  # spec lists 32; file adds WO_PARENT_ID
+
+spec_discrepancies:
+  - field: delimiter
+    spec: comma
+    actual: semicolon
+  - field: encoding
+    spec: utf-8-sig
+    actual: cp1252
+  - field: column_count
+    spec: 32
+    actual: 33
+    note: WO_PARENT_ID present in file but not documented in spec
+
+grain:
+  description: One row per completed or in-progress work order
+  primary_key: [WO_NO]
+
+keys:
+  primary: WO_NO
+  foreign:
+    - column: PM_NO
+      references: maintenance_plans.PM_NO
+      cardinality: optional  # only EH-työ (scheduled work) has PM_NO
+    - columns: [CUSTOMER_NO, CUSTOMER_SITE_NO, CUSTOMER_WORKSITE_NO]
+      references: dim_site.erp_keys
+
+columns:
+  CUSTOMER_NO:
+    type: integer
+    nullable: false
+  customer_name:
+    type: string
+    nullable: false
+  CUSTOMER_SITE_NO:
+    type: integer
+    nullable: false
+  customer_site_name:
+    type: string
+    nullable: false
+  site_address:
+    type: string
+    nullable: false
+  CUSTOMER_WORKSITE_NO:
+    type: string
+    nullable: false
+  CONTRACT_NO:
+    type: integer
+    nullable: true
+  CONTRACT:
+    type: string
+    nullable: false
+    enum: [SP, KIPA, KH, KT]
+  SERVICE_LINE_FIN:
+    type: string
+    nullable: false
+    language: fi
+  SERVICE_LINE_ENG:
+    type: string
+    nullable: false
+  WO_NO:
+    type: integer
+    nullable: false
+  WO_PARENT_ID:
+    type: integer
+    nullable: true
+    description: Parent work order reference (undocumented in spec)
+  WORK_ORDER_TYPE:
+    type: string
+    nullable: false
+    enum: ["EH-työ", "Tilaustyö"]
+  WORK_ORDER_TYPE_ENG:
+    type: string
+    nullable: false
+    enum: ["Scheduled work", "On-demand work"]
+  ASSIGNMENT_TYPE:
+    type: string
+    nullable: true
+    enum: ["Manuaalinen osoitus", "DS-osoitus", null]
+    notes: NULL for cleaning services (SP)
+  ASSIGNMENT_TYPE_ENG:
+    type: string
+    nullable: true
+    enum: ["Manually assigned", "Dynamically scheduled", null]
+  PRIORITY_ID:
+    type: integer
+    nullable: true
+    enum: [1, 2, 3, 4, 5, 6, null]
+    notes: NULL for cleaning services (SP)
+  WORK_DESCRIPTION:
+    type: string
+    nullable: true
+    language: fi
+    pii_tokens: true
+  WORK_ORDER_DESCRIPTION:
+    type: string
+    nullable: false
+    language: fi
+    pii_tokens: true
+    max_length: 60  # often truncated
+  WORK_ORDER_PERFORMED_ACTION:
+    type: string
+    nullable: true
+    language: fi
+    pii_tokens: true
+  WORK_TYPE_DESCRIPTION_FIN:
+    type: string
+    nullable: false
+    language: fi
+  WORK_TYPE_DESCRIPTION_ENG:
+    type: string
+    nullable: false
+  PM_NO:
+    type: string
+    nullable: true
+    null_literals: ["", "NULL", "null"]
+    notes: Present on EH-työ rows; links to maintenance plans
+  PM_ACTION_DESCR:
+    type: string
+    nullable: true
+  WORK_STARTED_DATETIME:
+    type: datetime
+    nullable: false
+    formats:
+      - "d.M.yyyy H:mm"  # e.g. 2.12.2019 10:00
+      - "YYYY-MM-DD HH:MM:SS.fff"
+    timezone: Europe/Helsinki
+  WORK_FINISHED_DATETIME:
+    type: datetime
+    nullable: false
+    formats:
+      - "d.M.yyyy H:mm"
+      - "YYYY-MM-DD HH:MM:SS.fff"
+    timezone: Europe/Helsinki
+  WORK_FINISHED_DAYS:
+    type: decimal
+    nullable: false
+    notes: "Can be very large (up to ~1261 days) for long-running orders"
+  SLA_REQUIRED_START_DATETIME:
+    type: datetime
+    nullable: true
+    formats:
+      - "d.M.yyyy H:mm"
+      - "d.M.yyyy H:mm:ss"
+    timezone: Europe/Helsinki
+  SLA_REQUIRED_END_DATETIME:
+    type: datetime
+    nullable: true
+    formats:
+      - "d.M.yyyy H:mm"
+    timezone: Europe/Helsinki
+  IS_SLA_VIOLATION:
+    type: boolean
+    nullable: false
+    raw_values: ["0", "1"]  # integer 0/1 in file
+  WORKTIME_HOURS:
+    type: decimal
+    nullable: true
+  WORK_INVOICABLE:
+    type: boolean
+    nullable: false
+    raw_values: ["TOSI", "EPÄTOSI"]  # Finnish True/False — NOT True/False strings
+    true_value: TOSI
+    false_value: EPÄTOSI
+  IS_SUBCONTRACTOR_WORK:
+    type: boolean
+    nullable: false
+    raw_values: ["TOSI", "EPÄTOSI"]
+    true_value: TOSI
+    false_value: EPÄTOSI
+
+sites_in_dataset:
+  - customer_no: 100279959
+    customer_site_no: 999154922
+    name: Venttiilitehdas
+    count: 25744
+  - customer_no: 100000413
+    customer_site_no: 998389833
+    name: Lentokentänkatu 11
+    count: 18330
+  - customer_no: 100279959
+    customer_site_no: 999488386
+    name: Toimistotalo
+    count: 151
+  - customer_no: 100279959
+    customer_site_no: 999530754
+    name: STD tehdas
+    count: 40
+
+cleaning_rules:
+  - detect_delimiter  # auto-detect ; vs ,
+  - detect_encoding  # try utf-8-sig then cp1252; fail loudly on mojibake
+  - normalize_null_literals: ["NULL", "", "null", "None"]
+  - parse_finnish_booleans: [TOSI, EPÄTOSI]
+  - parse_european_dates
+  - strip_bom
+
+quality_checks:
+  - name: wo_no_unique
+    type: uniqueness
+    columns: [WO_NO]
+
+silver_target: fact_work_order

@@ -1,0 +1,168 @@
+# Data contract: Luotea ERP alarm events
+# Spec: Luotea-Hackathon-2026/Alarms/alarms_data_spec.md
+# Verified against: Luotea-Hackathon-2026/Alarms/alarms.csv (first 50 rows + full scan)
+schema_version: "0.1.0"
+source_system: erp_alarms
+source_file: Luotea-Hackathon-2026/Alarms/alarms.csv
+spec_doc: Luotea-Hackathon-2026/Alarms/alarms_data_spec.md
+
+ownership:
+  system: Luotea ERP (alarm monitoring center)
+  refresh_cadence: batch_export  # periodic CSV drop; no streaming in hackathon dataset
+  pii_rules:
+    contains_pii: false
+    anonymization: none
+    preserve_tokens: []
+
+format:
+  type: csv
+  encoding: utf-8-sig  # UTF-8 with BOM — first header byte is \ufeff
+  delimiter: ","
+  quote_char: '"'
+  has_header: true
+  row_count_expected: 18702
+  column_count: 25
+
+grain:
+  description: One row per alarm event at a location point
+  primary_key: [ALERT_EVENT_ID]
+  notes:
+    - "Same ALERT_ID may fan out to multiple rows (one per LOCATION_ID)"
+    - "Group by ALERT_ID for unique alarm occurrences across locations"
+
+keys:
+  primary: ALERT_EVENT_ID
+  natural: [ALERT_ID, LOCATION_ID]
+  foreign:
+    - column: WORKORDER_NO
+      references: work_orders.WO_NO
+      cardinality: sparse  # ~4% of rows have a work order link
+    - columns: [CUSTOMER_NO, CUSTOMER_SITE_NO]
+      references: dim_site.erp_keys
+
+columns:
+  ALERT_EVENT_ID:
+    type: integer
+    nullable: false
+    description: Unique ID for each alarm event row
+  ALERT_EVENT_LAST_UPDATED:
+    type: datetime
+    nullable: false
+    format: "YYYY-MM-DD HH:MM:SS.fff"
+    timezone: Europe/Helsinki  # ERP local time; convert to UTC in Silver
+  CUSTOMER_NO:
+    type: integer
+    nullable: false
+  CUSTOMER_NAME:
+    type: string
+    nullable: false
+  CUSTOMER_SITE_NO:
+    type: integer
+    nullable: false
+  CUSTOMER_SITE_NAME:
+    type: string
+    nullable: false
+  SITE_ADDRESS:
+    type: string
+    nullable: false
+  CONTRACT_NO:
+    type: integer
+    nullable: false
+  EVENT_TIME:
+    type: datetime
+    nullable: false
+    format: "YYYY-MM-DD HH:MM:SS.fff"
+    timezone: Europe/Helsinki
+  ALERT_ID:
+    type: integer
+    nullable: false
+    description: Alert identifier; multiple event rows may share one ALERT_ID
+  EVENT_TYPE:
+    type: string
+    nullable: false
+    enum: ["Hälytys"]
+  HWID:
+    type: string
+    nullable: false
+  HWID_TYPE:
+    type: string
+    nullable: false
+    enum: ["Alerta", "K2 vastaanotin", "Sähköpostihälytys"]
+  LOOP:
+    type: string
+    nullable: true
+    cleaning:
+      - strip_leading_trailing_whitespace  # e.g. "     1", "  9999"
+  ALERT_TYPE:
+    type: string
+    nullable: true
+    enum: [LVIS, LINJAVIK, HÄLYT, INFO, LVIA, PALO, PALOVIK, "Lvi-häly", ""]
+    notes: "106 rows have empty string (not NULL)"
+  Priority:
+    type: integer
+    nullable: false
+    enum: [1, 13, 50, 60, 77, 99]
+  LOG_ONLY:
+    type: string
+    nullable: true
+    enum: ["L", null]
+    description: "L = log-only event (~33%); NULL = actionable alarm"
+  EVENT_DESCRIPTION:
+    type: string
+    nullable: false
+    language: fi
+  WORKORDER_NO:
+    type: integer
+    nullable: true
+    null_literals: ["NULL", "", "null"]  # literal string NULL in ~96% of rows
+  EVENT_CLOSED_TIME:
+    type: datetime
+    nullable: true
+    format: "YYYY-MM-DD HH:MM:SS.fff"
+    timezone: Europe/Helsinki
+  LOCATION_ID:
+    type: integer
+    nullable: false
+  LOCATION_TABLE_ID:
+    type: integer
+    nullable: false
+  LOCATION_LAST_UPDATED:
+    type: datetime
+    nullable: false
+    format: "YYYY-MM-DD HH:MM:SS.fff"
+    timezone: Europe/Helsinki
+  IVA_NO:
+    type: string
+    nullable: false
+  STATUS:
+    type: string
+    nullable: false
+    enum: ["Valvonnassa"]
+
+sites_in_dataset:
+  - customer_no: 100279959
+    customer_site_no: 999488386
+    name: Toimistotalo
+  - customer_no: 100279959
+    customer_site_no: 999154922
+    name: Venttiilitehdas
+  - customer_no: 100000413
+    customer_site_no: 998389833
+    name: Lentokentänkatu 11
+  - customer_no: 100279959
+    customer_site_no: 999530754
+    name: STD tehdas
+  - customer_no: 100279959
+    customer_site_no: 999530754
+    name: Wharehouse  # same site_no as STD tehdas, 3 events
+
+quality_checks:
+  - name: alert_event_id_unique
+    type: uniqueness
+    columns: [ALERT_EVENT_ID]
+  - name: priority_enum
+    type: enum
+    column: Priority
+    allowed: [1, 13, 50, 60, 77, 99]
+
+silver_target: fact_alarm

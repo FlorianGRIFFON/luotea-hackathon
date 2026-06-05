@@ -1,0 +1,134 @@
+# QA success thresholds — edit here without code changes.
+# Row counts sourced from contracts + observed Silver dedup behavior.
+schema_version: "0.1.0"
+ingest_date: "2026-06-05"
+
+bronze:
+  - id: bronze_all_sources_present
+    severity: error
+    description: All 6 source families landed in bronze partition
+    expected_sources:
+      - erp_alarms
+      - erp_work_orders
+      - erp_maintenance_plans
+      - smartti_pulse
+      - kone_occupancy
+      - cleaning_utilization
+
+silver:
+  - id: silver_row_count_alarms
+    severity: error
+    table: fact_alarm
+    expected_rows: 18702
+    tolerance_pct: 0.5
+
+  - id: silver_row_count_work_orders
+    severity: error
+    table: fact_work_order
+    expected_rows: 44265
+    tolerance_pct: 0.5
+
+  - id: silver_row_count_maintenance
+    severity: error
+    table: fact_maintenance_plan
+    expected_rows: 106
+    tolerance_pct: 1.0
+    description: Silver dedupes PM_NO (316 bronze rows → 106 unique plans)
+
+  - id: silver_pk_unique_alarms
+    severity: error
+    table: fact_alarm
+    column: alert_event_id
+
+  - id: silver_pk_unique_work_orders
+    severity: error
+    table: fact_work_order
+    column: wo_no
+
+  - id: silver_pk_unique_maintenance
+    severity: error
+    table: fact_maintenance_plan
+    column: pm_no
+
+  - id: silver_no_literal_null_strings
+    severity: error
+    table: fact_alarm
+    columns: [workorder_no]
+    forbidden_values: ["NULL", "null", ""]
+
+  - id: silver_erp_site_mapping
+    severity: error
+    table: fact_alarm
+    column: site_id
+    min_mapped_pct: 99.0
+
+  - id: silver_smartti_site_mapping
+    severity: warn
+    table: fact_sensor_reading
+    column: site_id
+    min_mapped_pct: 90.0
+
+  - id: silver_sensor_readings_nonempty
+    severity: error
+    table: fact_sensor_reading
+    min_rows: 100000
+
+  - id: silver_utilization_mapped
+    severity: warn
+    table: fact_utilization
+    column: site_id
+    min_mapped_pct: 50.0
+
+gold:
+  - id: gold_site_daily_signals_grain
+    severity: error
+    table: site_daily_signals
+    unique_keys: [site_id, signal_date]
+
+  - id: gold_site_daily_signals_nonempty
+    severity: error
+    table: site_daily_signals
+    min_rows: 100
+
+  - id: gold_valmet_l11_has_erp_signals
+    severity: error
+    table: site_daily_signals
+    site_id: site_valmet_l11
+    min_alarm_count_total: 100
+
+  - id: gold_valmet_l11_has_utilization
+    severity: warn
+    table: site_daily_signals
+    site_id: site_valmet_l11
+    column: avg_room_utilization_pct
+    min_non_null_pct: 10.0
+
+  - id: gold_aurora_has_smartti_signals
+    severity: error
+    table: site_daily_signals
+    site_id: site_aurora
+    column: electricity_kwh
+    min_non_null_pct: 5.0
+
+  - id: gold_aurora_no_erp_alarms
+    severity: warn
+    table: site_daily_signals
+    site_id: site_aurora
+    column: alarm_count
+    max_non_zero_pct: 5.0
+
+  - id: gold_event_timeline_nonempty
+    severity: error
+    table: event_timeline
+    min_rows: 1000
+
+integrity:
+  - id: idempotent_rerun
+    severity: error
+    description: Two consecutive silver+gold runs produce identical row counts
+
+  - id: no_pii_leak
+    severity: error
+    description: Gold tables must not contain raw email patterns
+    tables: [site_daily_signals, event_timeline]
+    pattern: '@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}'

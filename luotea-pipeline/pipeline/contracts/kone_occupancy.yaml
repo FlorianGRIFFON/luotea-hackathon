@@ -1,0 +1,114 @@
+# Data contract: KONE elevator occupancy profiles
+# Spec: Luotea-Hackathon-2026/Smartti/kone/README.md
+# Verified against: *_normalized.json and raw variants (first 50 rows)
+schema_version: "0.1.0"
+source_system: kone_occupancy
+source_files:
+  - Luotea-Hackathon-2026/Smartti/kone/Aurora_House_*-normalized.json
+  - Luotea-Hackathon-2026/Smartti/kone/Aurora_House_*.json
+  - Luotea-Hackathon-2026/Smartti/kone/Meridian_Tower_*-normalized.json
+  - Luotea-Hackathon-2026/Smartti/kone/Meridian_Tower_*.json
+  - Luotea-Hackathon-2026/Smartti/kone/Horizon_Plaza_*-normalized.json
+  - Luotea-Hackathon-2026/Smartti/kone/Horizon_Plaza_*.json
+spec_doc: Luotea-Hackathon-2026/Smartti/kone/README.md
+
+ownership:
+  system: KONE Occupancy API (pre-exported)
+  refresh_cadence: batch_export
+  export_date: "2026-05-27"
+  pii_rules:
+    contains_pii: false
+    notes: Building names anonymized
+
+format:
+  type: json
+  encoding: utf-8
+  root_structure: array  # top-level JSON array, NOT wrapped object
+  variants:
+    - suffix: "-normalized"
+      value_type: normalized
+      value_range: [0, 10]
+      description: "0-10 scale where 10 = peak occupancy"
+    - suffix: ""
+      value_type: raw_count
+      description: Absolute sensor counts
+
+coverage:
+  period:
+    start_month: 12  # December 2025
+    start_year: 2025
+    end_month: 5  # May 2026
+    end_year: 2026
+    months: 6
+  resolution_minutes: 60
+  hours_per_row: 24
+  weekends_included: true
+
+buildings:
+  - kone_building: Aurora House
+    file_pattern: Aurora_House_
+    floors: ["P", "1", "2", "3", "4", "5", "6"]
+    floor_count: 7
+    rows_per_variant: 294
+  - kone_building: Meridian Tower
+    file_pattern: Meridian_Tower_
+    floors: ["K1", "K2", "1", "2", "3", "4", "5", "6", "7", "8"]
+    floor_count: 10
+    rows_per_variant: 420
+  - kone_building: Horizon Plaza
+    file_pattern: Horizon_Plaza_
+    floors: ["P1", "-1", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+    floor_count: 13
+    rows_per_variant: 546
+
+grain:
+  raw:
+    description: One row per (building, month, weekday, floor) with 24 hourly values
+    primary_key: [building_name, month, weekday, floor, value_type]
+  exploded:
+    description: One row per (building, month, weekday, floor, hour)
+    primary_key: [building_name, month, weekday, floor, hour, value_type]
+
+fields:
+  month:
+    type: integer
+    nullable: false
+    range: [1, 12]
+    description: "1=January … 12=December"
+  weekday:
+    type: integer
+    nullable: false
+    range: [1, 7]
+    description: "1=Monday … 7=Sunday"
+  site_connection_ok:
+    type: boolean
+    nullable: true
+    description: "false = connection issue; null = no data (historical)"
+  floor:
+    type: string
+    nullable: false
+    examples: ["P", "K1", "K2", "1", "10", "-1"]
+  floor_id:
+    type: integer
+    nullable: false
+    description: Abstract floor ID; lower = lower floor
+  occupancy:
+    type: array
+    item_type: integer
+    length: 24
+    nullable: false
+    description: Hourly values starting at hour 0 (00:00)
+
+row_count_formula: "months × weekdays × floors = rows per building per variant"
+
+transform_rules:
+  - explode occupancy[0..23] to hour column (0-23)
+  - add synthetic year from export period context (2025 for month 12; 2026 for months 1-5)
+  - store value_type column (normalized vs raw_count)
+  - prefer normalized variant for cross-building comparison
+
+silver_target: fact_occupancy
+
+notes:
+  - No absolute calendar timestamps — join via (year, month, weekday, hour) synthetic key
+  - Pair with Smartti sites via kone_building name in mappings/sites.yaml

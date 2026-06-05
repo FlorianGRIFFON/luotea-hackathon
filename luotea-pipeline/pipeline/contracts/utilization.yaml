@@ -1,0 +1,83 @@
+# Data contract: Room/desk utilization (need-based cleaning)
+# Spec: none (wide CSV exports under need-based cleaning/)
+# Verified against: Room_Utilization_*.csv files (Valmet Lentokentänkatu 11)
+schema_version: "0.1.0"
+source_system: cleaning_utilization
+source_glob: Luotea-Hackathon-2026/need-based cleaning/**/Room_Utilization_*.csv
+spec_doc: null
+
+ownership:
+  system: Luotea cleaning IoT / room booking analytics
+  refresh_cadence: batch_export  # overlapping date-range exports
+  pii_rules:
+    contains_pii: false
+
+format:
+  type: csv
+  encoding: utf-8-sig
+  delimiter: ","
+  quote_char: '"'
+  has_header: true
+  layout: wide  # asset row × date columns
+
+site_context:
+  customer: Valmet Technologies Oy
+  site: Lentokentänkatu 11
+  erp_customer_no: 100000413
+  erp_customer_site_no: 998389833
+  canonical_site_id: site_valmet_l11
+
+files:
+  count: 10
+  pattern: "Room_Utilization_MMDDYY-MMDDYY.csv"
+  notes: Multiple exports with overlapping date ranges; dedupe on (asset, date)
+
+grain:
+  raw:
+    description: One row per asset with date columns as wide fields
+    primary_key: [asset, source_file]
+  unpivoted:
+    description: One row per (asset, date)
+    primary_key: [asset_name, date]
+    dedupe:
+      key: [asset_name, date]
+      strategy: keep_latest_file
+
+columns:
+  asset:
+    type: string
+    nullable: false
+    description: Room or desk name (e.g. Letto, Karhu, K2, 2.krs Neukkari)
+    unique_count: 38
+  date_columns:
+    type: decimal
+    nullable: true
+    header_format: "YYYY-MM-DD"
+    value_format: decimal_string  # e.g. "26.67" — utilization percentage
+    description: Daily utilization percentage per asset
+
+sample_assets:
+  - Letto
+  - Karhu
+  - Räme
+  - Puolukka
+  - "2.krs Neukkari"
+  - Kelo
+  - Kaarna
+  - K2
+  - K3
+
+transform_rules:
+  - unpivot date columns to (asset_name, date, utilization_pct)
+  - parse utilization_pct as float
+  - dedupe overlapping exports keeping latest source file by date range end
+  - map asset_name to canonical asset via mappings/assets.yaml (future)
+
+quality_checks:
+  - name: utilization_pct_range
+    type: range
+    column: utilization_pct
+    min: 0
+    max: 100
+
+silver_target: fact_utilization

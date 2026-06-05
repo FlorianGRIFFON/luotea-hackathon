@@ -1,0 +1,172 @@
+# Data contract: Smartti Pulse building energy & indoor climate
+# Spec: Luotea-Hackathon-2026/Smartti/SPEC.md
+# Verified against: aurora_house.json, meridian_tower.json, horizon_plaza.json, metadata.json
+schema_version: "0.1.0"
+source_system: smartti_pulse
+source_files:
+  - Luotea-Hackathon-2026/Smartti/aurora_house.json
+  - Luotea-Hackathon-2026/Smartti/meridian_tower.json
+  - Luotea-Hackathon-2026/Smartti/horizon_plaza.json
+  - Luotea-Hackathon-2026/Smartti/metadata.json
+spec_doc: Luotea-Hackathon-2026/Smartti/SPEC.md
+
+ownership:
+  system: Smartti Pulse (pulsedb)
+  refresh_cadence: batch_export
+  pii_rules:
+    contains_pii: false
+    notes: NovaProp customer; building names/addresses anonymized
+
+format:
+  type: json
+  encoding: utf-8
+  root_structure:
+    metadata: object
+    customer: object
+    property: object  # may include children[] (Meridian Tower only)
+
+grain:
+  readings:
+    description: One exploded row per (property, metric, meter_key, timestamp)
+    primary_key: [property_id, metric, meter_key, timestamp_utc]
+  incidents:
+    description: One row per maintenance/fault incident
+    primary_key: [incident_id]
+  nodes:
+    description: One row per device/system/building node
+    primary_key: [node_id]
+
+properties:
+  - file_slug: aurora_house
+    property_id: property_mh4lo676jel77ozrjskgv54a
+    name: Aurora House
+    has_children: false
+    metrics: [district_heating_MWh, electricity_kWh, interior_co2_ppm, interior_temperature_C, interior_temperature_target_C, interior_temperature_tolerance_C, water_m3]
+  - file_slug: meridian_tower
+    property_id: property_gx062pibthf0vv0u8pz4ndsz
+    name: Meridian Tower
+    has_children: true
+    child_count: 3
+    metrics: [interior_co2_ppm, interior_temperature_C, interior_temperature_target_C, interior_temperature_tolerance_C]
+    notes: Parent has automation data; children (Rakennus 1/2/3) have per-building energy metering
+  - file_slug: horizon_plaza
+    property_id: property_or7o58m7wj02ockfr11xx5xu
+    name: Horizon Plaza
+    has_children: false
+    metrics: [district_cooling_MWh, district_heating_MWh, electricity_kWh, interior_co2_ppm, interior_temperature_C, interior_temperature_target_C, interior_temperature_tolerance_C, water_m3]
+
+entities:
+  customer:
+    fields:
+      id: { type: string, nullable: false }
+      name: { type: string, nullable: false }
+      region_code: { type: string, nullable: false }
+      currency: { type: string, nullable: false }
+      timezone: { type: string, nullable: false }
+      default_pricing: { type: object, nullable: false }
+
+  property:
+    fields:
+      id: { type: string, nullable: false }
+      name: { type: string, nullable: false }
+      address: { type: string, nullable: false }
+      city: { type: string, nullable: false }
+      zip_code: { type: string, nullable: true }
+      region_code: { type: string, nullable: false }
+      timezone: { type: string, nullable: false }
+      gross_area_m2: { type: number, nullable: true }
+      smartti_commissioned_at: { type: datetime_iso, nullable: true }
+      smartti_automation_id: { type: string, nullable: true }
+      pricing: { type: object, nullable: true }
+      nodes: { type: array, nullable: false }
+      readings: { type: object, nullable: false }
+      incidents: { type: array, nullable: false }
+      children: { type: array, nullable: true }
+
+  node:
+    fields:
+      id: { type: string, nullable: false }
+      name: { type: string, nullable: false }
+      type: { type: string, nullable: false, enum: [device, system, building] }
+      tags: { type: string, nullable: true }
+      ekohuolto_id: { type: string, nullable: true }
+
+  reading_data_point:
+    fields:
+      t: { type: datetime_iso, nullable: false, timezone: UTC }
+      v: { type: number, nullable: false }
+      key: { type: string, nullable: false, description: "Sensor/meter key" }
+      src: { type: string, nullable: false, enum: [enerkey, smartti_automation] }
+    notes:
+      - "Timestamps use space separator: '2021-02-10 12:00:00+00' (not T separator)"
+      - "Energy (enerkey) typically hourly; climate (smartti_automation) ~5-15 min"
+
+  incident:
+    fields:
+      id: { type: string, nullable: false }
+      node_id: { type: string, nullable: true }
+      created_at: { type: datetime_iso, nullable: false, timezone: UTC }
+      updated_at: { type: datetime_iso, nullable: false, timezone: UTC }
+      event_type: { type: string, nullable: false, language: fi }
+      priority: { type: string, nullable: false, enum: [immediate, significant, according_to_agreement] }
+      status: { type: string, nullable: false, enum: [pending, in_progress, awaiting_review, resolved] }
+      category: { type: string, nullable: false, enum: [fault, optimization, administrative, conditions_deviation] }
+      points: { type: number, nullable: false }
+      description: { type: string, nullable: false, language: fi }
+      internal: { type: boolean, nullable: false }
+      include_in_report: { type: boolean, nullable: false }
+      comments: { type: array, nullable: false }
+
+  incident_comment:
+    fields:
+      id: { type: string, nullable: false }
+      created_at: { type: datetime_iso, nullable: false }
+      modified_at: { type: datetime_iso, nullable: true }
+      comment: { type: string, nullable: false, language: fi }
+      status: { type: string, nullable: true }
+      commenter_name: { type: string, nullable: true }
+
+metrics:
+  electricity_kWh:
+    unit: kWh
+    typical_source: enerkey
+    interval: hourly
+  district_heating_MWh:
+    unit: MWh
+    typical_source: enerkey
+    interval: hourly
+  district_cooling_MWh:
+    unit: MWh
+    typical_source: enerkey
+    interval: hourly
+  water_m3:
+    unit: m3
+    typical_source: enerkey
+    interval: hourly
+  interior_temperature_C:
+    unit: "°C"
+    typical_source: smartti_automation
+  interior_temperature_target_C:
+    unit: "°C"
+    typical_source: smartti_automation
+  interior_temperature_tolerance_C:
+    unit: "°C"
+    typical_source: smartti_automation
+  interior_co2_ppm:
+    unit: ppm
+    typical_source: smartti_automation
+
+spec_discrepancies:
+  - field: incident.category
+    spec: [fault, optimization, administrative]
+    actual: includes conditions_deviation (observed in aurora_house.json)
+
+transform_rules:
+  - explode readings.{metric}.data[] to long format
+  - flatten property.children[] with parent_property_id link
+  - preserve UTC timestamps (no conversion needed for readings/incidents)
+
+silver_targets:
+  readings: fact_sensor_reading
+  incidents: fact_incident
+  nodes: dim_equipment

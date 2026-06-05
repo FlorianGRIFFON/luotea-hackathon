@@ -1,0 +1,80 @@
+version: 2
+name: luotea_hackathon_gold
+description: Gold layer marts for Luotea Hackathon 2026 pipeline
+
+models:
+  - name: site_daily_signals
+    description: >
+      Unified operational signals per site and calendar day. Joins ERP alarms,
+      work orders, Smartti sensor readings, incidents, KONE occupancy, and
+      room/desk utilization. Sites with partial source coverage retain null
+      metrics for unavailable domains (never dropped).
+    grain: one row per site_id × signal_date
+    primary_key: [site_id, signal_date]
+    columns:
+      - name: site_id
+        description: Canonical site identifier from mappings/sites.yaml
+        tests: [not_null]
+      - name: signal_date
+        description: Calendar date (UTC) for aggregated signals
+        tests: [not_null]
+      - name: alarm_count
+        description: Total ERP alarm events on this date
+      - name: fire_alarm_count
+        description: Fire-related alarms (PALO, PALOVIK, or priority 1)
+      - name: hvac_alarm_count
+        description: HVAC/technical alarms (LVIS, LVIA, LINJAVIK, Lvi-häly)
+      - name: open_work_orders
+        description: Work orders active on this date (started ≤ date ≤ finished)
+      - name: sla_violations
+        description: Work orders finished on this date with SLA violation
+      - name: avg_co2_ppm
+        description: Mean indoor CO₂ from Smartti (null if no sensor data)
+      - name: avg_indoor_temp_c
+        description: Mean indoor temperature °C from Smartti (null if unavailable)
+      - name: electricity_kwh
+        description: Sum of hourly electricity_kWh readings (null if unavailable)
+      - name: heating_mwh
+        description: Sum of district_heating_MWh readings (null if unavailable)
+      - name: avg_room_utilization_pct
+        description: Mean room utilization % (non-desk assets, Valmet L11 only)
+      - name: avg_desk_utilization_pct
+        description: Mean desk utilization % (K-prefix assets)
+      - name: avg_elevator_occupancy
+        description: Mean normalized KONE occupancy (0–10); sparse calendar mapping
+      - name: incident_count
+        description: Smartti incidents created on this date
+      - name: unresolved_incident_count
+        description: Incidents created on this date not in resolved status
+      - name: as_of_date
+        description: Snapshot date when Gold table was built (reproducibility)
+
+  - name: event_timeline
+    description: >
+      Unified chronological stream of operational events from ERP alarms,
+      work order start/finish, and Smartti incidents. site_id is nullable
+      when source rows are unmapped.
+    grain: one row per event_id
+    primary_key: [event_id]
+    columns:
+      - name: event_id
+        description: Surrogate key prefixed by source (alarm:, wo:, incident:)
+        tests: [not_null, unique]
+      - name: site_id
+        description: Canonical site (nullable for unmapped sources)
+      - name: asset_id
+        description: Optional asset/node identifier (Smartti node_id)
+      - name: event_type
+        description: Normalized event category (alarm_*, work_order_*, Smartti event_type)
+      - name: severity
+        description: Normalized severity (critical, high, standard, informational, …)
+      - name: timestamp_utc
+        description: Event timestamp in UTC
+        tests: [not_null]
+      - name: description
+        description: Human-readable event text (Finnish preserved)
+      - name: source_system
+        description: Origin system (erp_alarms, erp_work_orders, smartti_pulse)
+        tests: [not_null]
+      - name: source_record_id
+        description: Primary key in the source Silver fact table
