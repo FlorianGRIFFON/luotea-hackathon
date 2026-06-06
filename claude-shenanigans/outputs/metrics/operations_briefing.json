@@ -1,0 +1,54 @@
+{
+  "title": "Facility Operations \u2014 Morning Reliability Briefing",
+  "sites": [
+    {
+      "site_id": "site_valmet_l11",
+      "display_name": "Valmet \u00b7 Lentokent\u00e4nkatu 11 (Tampere)",
+      "persona": "Sari \u2014 Facility & Service Manager",
+      "reliability_index": 49.0,
+      "band": "NORMAL",
+      "band_label": "\ud83d\udfe1 Normal \u2014 watch the queue",
+      "headline": "4 of your open work orders are high-risk for an SLA breach. Work them before the routine queue.",
+      "do_first": [
+        {
+          "wo_no": 7406386,
+          "work_type": "Outdoor area and green area maintenance",
+          "risk_pct": 96.8,
+          "reason": "Outdoor area and green area maintenance: 97% breach risk \u2014 long/complex job that has historically slipped; start now."
+        },
+        {
+          "wo_no": 7409471,
+          "work_type": "Outdoor area and green area maintenance",
+          "risk_pct": 96.0,
+          "reason": "Outdoor area and green area maintenance: 96% breach risk \u2014 long/complex job that has historically slipped; start now."
+        },
+        {
+          "wo_no": 7229591,
+          "work_type": "Periodic maintenance property operation and maintenance",
+          "risk_pct": 95.3,
+          "reason": "Periodic maintenance property operation and maintenance: 95% breach risk \u2014 long/complex job that has historically slipped; start now."
+        }
+      ],
+      "recommended_actions": [
+        "Dispatch the high-risk work orders above first \u2014 not in arrival/calendar order.",
+        "Confirm subcontractor capacity for the flagged service lines today.",
+        "If the reliability index stays elevated for 3+ days, pull forward preventive maintenance."
+      ]
+    },
+    {
+      "site_id": "site_aurora",
+      "display_name": "NovaProp \u00b7 Aurora House",
+      "persona": "Mikko \u2014 Property Operations Lead (IoT only, no ERP)",
+      "reliability_index": 48.0,
+      "band": "NORMAL",
+      "band_label": "\ud83d\udfe1 Normal \u2014 watch the queue",
+      "headline": "No ERP work orders here \u2014 reliability comes from energy & incidents. 0 incident(s) in the last 30 days.",
+      "do_first": [],
+      "recommended_actions": [
+        "Review days where the energy signal deviates from the building's 28-day normal (possible HVAC fault or waste).",
+        "Triage any unresolved incidents before they escalate to tenant complaints.",
+        "Same 0\u2013100 reliability scale as the Valmet sites \u2014 compare across the portfolio."
+      ]
+    }
+  ]
+}

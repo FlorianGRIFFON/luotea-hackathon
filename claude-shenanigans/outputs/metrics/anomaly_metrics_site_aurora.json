@@ -1,0 +1,15 @@
+{
+  "site_id": "site_aurora",
+  "n_rows": 1928,
+  "n_anomalies_if": 97,
+  "anomaly_rate_if": 0.0503,
+  "score_min": -0.7422888134392646,
+  "score_max": -0.3927304541367731,
+  "score_mean": -0.4543114365220116,
+  "baseline_max_zscore_p95": 2.9806028037622556,
+  "feature_names": [
+    "electricity_kwh",
+    "heating_mwh",
+    "incident_count"
+  ]
+}

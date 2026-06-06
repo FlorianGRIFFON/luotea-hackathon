@@ -1,1 +1,25 @@
 .Luotea-Hackathon-2026
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# OS
+.DS_Store
+
+# Agent prompt instructions (not project documentation)
+**/AGENT_PROMPT.md
+**/QA_AGENT_PROMPT.md
+claude-shenanigans/RUN.md
+
+# luotea-pipeline
+luotea-pipeline/data/
+
+# claude-shenanigans outputs
+claude-shenanigans/outputs/models/*.pkl
+claude-shenanigans/outputs/models/*.joblib
+claude-shenanigans/outputs/figures/*.png
