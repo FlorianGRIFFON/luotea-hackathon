@@ -108,6 +108,44 @@ def gap(height: int = 14):
     st.markdown(f"<div style='height: {height}px'></div>", unsafe_allow_html=True)
 
 
+def render_risk_queue(height: int = 380):
+    """The attributed, risk-ranked work-order queue (shared by Story and Manager tabs)."""
+    q = load_parquet(PRED / "task_assignments.parquet")[
+        ["wo_no", "site_id", "work_type_eng", "assigned_to", "breach_risk_pct",
+         "risk_band", "severity", "action"]
+    ].copy()
+    q["site_id"] = q["site_id"].map(SITE_DISPLAY)
+    q = q.rename(columns={"wo_no": "WO #", "site_id": "Site", "work_type_eng": "Work type",
+                          "assigned_to": "Assigned to", "breach_risk_pct": "Breach risk %",
+                          "risk_band": "Risk", "severity": "Severity", "action": "Action"})
+    st.dataframe(q.style.map(lambda v: ACTION_BG.get(v, ""), subset=["Action"])
+                 .format({"Breach risk %": "{:.1f}"}),
+                 hide_index=True, height=height, width="stretch")
+
+
+def render_reliability_chart(key: str, default_sites=("site_valmet_l11", "site_aurora")):
+    """Interactive Reliability-Risk-Index-over-time chart (shared by Story and Manager tabs)."""
+    rri = load_parquet(PRED / "reliability_index.parquet").dropna(subset=["reliability_risk_index"])
+    sites = sorted(rri["site_id"].unique())
+    default = [s for s in default_sites if s in sites] or sites[:2]
+    chosen = st.multiselect("Sites", sites, default=default, format_func=fmt_site, key=f"sites_{key}")
+    if not chosen:
+        return
+    d = rri[rri["site_id"].isin(chosen)].copy()
+    d["signal_date"] = pd.to_datetime(d["signal_date"])
+    d = d[d["signal_date"] >= d["signal_date"].max() - pd.Timedelta(days=730)]
+    d["site"] = d["site_id"].map(fmt_site)
+    line = alt.Chart(d).mark_line(opacity=0.85).encode(
+        x=alt.X("signal_date:T", title="Date"),
+        y=alt.Y("reliability_risk_index:Q", title="Reliability Risk Index", scale=alt.Scale(domain=[0, 100])),
+        color=alt.Color("site:N", title="Site"),
+        tooltip=["site", "signal_date:T", alt.Tooltip("reliability_risk_index:Q", format=".0f")],
+    )
+    band = alt.Chart(pd.DataFrame({"y": [70]})).mark_rule(strokeDash=[6, 4], color="orange").encode(y="y")
+    st.altair_chart((line + band).properties(height=360), width="stretch")
+    st.caption("Orange line = elevated-risk threshold.")
+
+
 def reason_for(work_type: str, risk: float) -> str:
     if risk >= 80:
         return "Long/complex job that has historically slipped — start now."
@@ -213,18 +251,26 @@ with tabs[0]:
                     f"{h['dispatch_top10pct_breaches_caught']:,} breaches caught early")
         u[2].metric("Work orders scored", f"{h['n_work_orders_scored']:,}")
 
+    gap()
+    st.markdown("**What the model produces: a risk-ranked, attributed queue.**")
+    st.caption(
+        "Every open work order, scored for SLA-breach risk and assigned to the right crew member, "
+        "worst first. This is the live Manager view; drill in there to act on it."
+    )
+    render_risk_queue(height=320)
+
     st.divider()
     # ---------- 5. Reliability Risk Index ----------
     st.markdown("### One number per site: the Reliability Risk Index")
     st.markdown(
-        "We roll the breach prediction and the live signals (alarms, energy, incidents) into a single "
-        "0 to 100 score per site, so a manager watches one number instead of hundreds."
+        "A manager does not want hundreds of probabilities, they want one number. The **Reliability "
+        "Risk Index** rolls the breach prediction together with the live signals (alarms, energy, "
+        "incidents) into a single **0 to 100 score per site**. It is a *now-cast* of operational risk: "
+        "the same scale for an ERP factory and an IoT office tower, so you can tell normal variation "
+        "from genuinely elevated risk and watch a whole portfolio at a glance."
     )
     gap()
-    st.image(str(FIG / "reliability_index_cross_site.png"),
-             caption="One 0 to 100 scale: a Valmet ERP site (work-order and SLA risk) and a NovaProp "
-                     "IoT site (energy and incident risk). The level is real and persists; it does not "
-                     "snap back to 50.")
+    render_reliability_chart(key="story")
 
     st.divider()
     # ---------- 6. What actions can people take? ----------
@@ -283,16 +329,7 @@ with tabs[1]:
         cc[2].metric("Crew", crew.get("workers", "—"))
 
     st.markdown("**Risk-ranked queue (attributed)** — ordered by recommended action:")
-    q = load_parquet(PRED / "task_assignments.parquet")[
-        ["wo_no", "site_id", "work_type_eng", "assigned_to", "breach_risk_pct", "risk_band", "severity", "action"]
-    ].copy()
-    q["site_id"] = q["site_id"].map(SITE_DISPLAY)
-    q = q.rename(columns={"wo_no": "WO #", "site_id": "Site", "work_type_eng": "Work type",
-                           "assigned_to": "Assigned to", "breach_risk_pct": "Breach risk %",
-                           "risk_band": "Risk", "severity": "Severity", "action": "Action"})
-    st.dataframe(
-        q.style.map(lambda v: ACTION_BG.get(v, ""), subset=["Action"]),
-        hide_index=True, height=380, width="stretch")
+    render_risk_queue(height=380)
 
     st.divider()
     st.markdown(
@@ -301,24 +338,7 @@ with tabs[1]:
         "Same scale for every customer; pick sites below to compare.",
         unsafe_allow_html=True,
     )
-    rri = load_parquet(PRED / "reliability_index.parquet").dropna(subset=["reliability_risk_index"])
-    sites = sorted(rri["site_id"].unique())
-    default = [s for s in ["site_valmet_l11", "site_aurora"] if s in sites] or sites[:2]
-    chosen = st.multiselect("Sites", sites, default=default, format_func=fmt_site)
-    if chosen:
-        d = rri[rri["site_id"].isin(chosen)].copy()
-        d["signal_date"] = pd.to_datetime(d["signal_date"])
-        d = d[d["signal_date"] >= d["signal_date"].max() - pd.Timedelta(days=730)]
-        d["site"] = d["site_id"].map(fmt_site)
-        line = alt.Chart(d).mark_line(opacity=0.85).encode(
-            x=alt.X("signal_date:T", title="Date"),
-            y=alt.Y("reliability_risk_index:Q", title="Reliability Risk Index", scale=alt.Scale(domain=[0, 100])),
-            color=alt.Color("site:N", title="Site"),
-            tooltip=["site", "signal_date:T", alt.Tooltip("reliability_risk_index:Q", format=".0f")],
-        )
-        band = alt.Chart(pd.DataFrame({"y": [70]})).mark_rule(strokeDash=[6, 4], color="orange").encode(y="y")
-        st.altair_chart((line + band).properties(height=360), width="stretch")
-        st.caption("Orange line = elevated-risk threshold.")
+    render_reliability_chart(key="manager")
 
 # ============================================================================= 3. MY TASKS
 with tabs[2]:
