@@ -1,4 +1,5 @@
 .Luotea-Hackathon-2026
+Luotea-Hackathon-2026/
 
 # Python
 .venv/
@@ -23,3 +24,7 @@ luotea-pipeline/data/
 claude-shenanigans/outputs/models/*.pkl
 claude-shenanigans/outputs/models/*.joblib
 claude-shenanigans/outputs/figures/*.png
+
+# claude-shenanigans local scratch notes
+claude-shenanigans/creative-extensions/CRAZY_IDEAS.md
+claude-shenanigans/creative-extensions/PWA_DECISION.md
