@@ -3,9 +3,9 @@
 ## What the models enable
 
 ### 1. Morning risk briefing for operations managers
-Every morning, `score_orders.py` produces a ranked list of orders by SLA risk. Instead of reviewing every open order, the operations manager looks at the 30–40 flagged HIGH risk ones and decides: reassign, expedite, or call the technician.
+Every morning, `score_orders.py` produces a ranked list of orders by SLA risk. Instead of reviewing every open order, the operations manager looks at the flagged HIGH risk ones and decides: reassign, expedite, or call the technician.
 
-The KH model does this with **95.8% precision** — when it flags HIGH risk, it is almost certainly right. Out of every 20 HIGH-risk flags, 19 are real. That is trustworthy enough to act on.
+The KH model does this with high precision — when it flags HIGH risk, it is almost certainly right. That is trustworthy enough to act on.
 
 ### 2. Escalation before the deadline, not after
 Right now, SLA violations are discovered after they happen. The model flags them at order *creation* — potentially 2–5 days before the deadline. That window is enough to reassign the job or negotiate with the client.
@@ -18,7 +18,7 @@ From the KH test set (1,146 orders, last 12 months):
 |---|---|
 | Actual violations | 485 |
 | Caught by model (80% recall) | 388 |
-| False alarms | 17 |
+| False alarms | 15 |
 
 If operations intervenes on the 388 flagged orders and converts even half to compliant, that is **~194 KH SLA violations avoided per year at one site**. If each violation carries a contractual penalty or relationship cost, that number is a concrete business case.
 
@@ -38,13 +38,13 @@ KT building automation repairs have a **77% violation rate** — the highest of 
 
 This means either there are not enough qualified BMS technicians available, or the SLA window is unrealistic for that type of work. The data makes the case for either hiring a specialist or renegotiating those specific SLA terms.
 
-### 6. The SP cleaning contract has a structural problem
-61% of all cleaning orders miss SLA. That is not a prediction problem — it is evidence that the current cleaning contract terms are routinely unachievable. This is powerful data for a contract review conversation with the client. The models did not solve this, but they quantified it clearly.
+### 6. Team workload predicts KT failures
+The KT model discovered that the rolling 7-day average of open work orders at a site is the **third most important predictor** of SLA violations — more important than site identity or most work type categories.
 
-### 7. KIPA's discontinuation was the right call
-KIPA mixed cleaning work (59% violation) with technical maintenance (16% violation) under one contract and one SLA. The resulting average (46%) masked a huge internal split. Separating into SP and KH/KT made the problem visible — and the data confirms the restructuring was correct.
+This is an operational insight: KT SLA compliance is not just about the type of work, it is about whether the team is already overloaded when the order arrives. A site running 18 open WOs over the past week will miss more SLAs than the same site at 8 open WOs, for the exact same type of job.
 
----
+### 7. The SP cleaning contract has a structural problem
+61% of all cleaning orders miss SLA. That is not a prediction problem — it is evidence that the current cleaning contract terms are routinely unachievable. This is powerful data for a contract review conversation with the client.
 
 ---
 
@@ -73,18 +73,6 @@ The model has two components:
 | Accumulation days (max 5) | 20% | Rest penalty — how long without a zero-use day? |
 
 Score ≥ 65 → **CLEAN tonight** | 35–65 → **MONITOR** | < 35 → **SKIP**
-
-### Results for the latest available day (2026-05-27)
-
-May 27 was a below-average day (overall 6.8% mean utilization). The system recommended:
-
-- **0 rooms** to clean tonight — usage was too low to justify
-- **14 rooms** to monitor — heavy rooms that have been accumulating use all week
-- **24 rooms** to skip (63% of total) — no cleaning needed
-
-This is the business value in one number: **63% of rooms can be skipped on a light day**. Under the current fixed calendar, cleaners would visit all 38.
-
-On a heavy day (Monday after a busy week), the CLEAN list would grow to 10–15 rooms — the model adjusts automatically.
 
 ### Operational value
 
@@ -122,13 +110,12 @@ On a heavy day (Monday after a busy week), the CLEAN list would grow to 10–15 
 
 ## Summary
 
-The models turn a reactive process — *"we missed 53% of SLAs last month"* — into a proactive one: *"these 38 orders are at high risk right now, act before the deadline."*
+The models turn a reactive process — *"we missed 53% of SLAs last month"* — into a proactive one: *"these orders are at high risk right now, act before the deadline."*
 
 | Contract | Model quality | Practical use |
 |---|---|---|
-| KH — Property maintenance | AUC 0.952 — production ready | Flag reactive orders before they miss SLA |
-| KT — Technical maintenance | AUC 0.792 — useful signal | Prioritise specialist work and automation repairs |
-| KIPA — Facility services | AUC 0.812 — historical only | Legacy analysis; no new orders since 2021 |
+| KH — Property maintenance | AUC 0.950 — production ready | Flag reactive orders before they miss SLA |
+| KT — Technical maintenance | AUC 0.784 — useful signal | Prioritise by workload pressure and work type |
 | SP — Cleaning | No model | Reveals a structural contract problem — 61% baseline violation |
 
-For KH, the prediction is reliable enough to act on directly. For KT, it is a useful prioritisation signal. For SP, the most valuable output is not a prediction — it is the number itself: **61% of cleaning orders miss SLA by default**, which is a finding that belongs in a client conversation, not a dashboard alert.
+For KH, the prediction is reliable enough to act on directly. For KT, it is a useful prioritisation signal — especially valuable when the site is running a high open-WO backlog. For SP, the most valuable output is not a prediction — it is the number itself: **61% of cleaning orders miss SLA by default**, which is a finding that belongs in a client conversation, not a dashboard alert.

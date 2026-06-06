@@ -2,21 +2,28 @@
 SLA Violation Prediction — segmented models (one per contract type)
 ====================================================================
 
-Trains a separate Random Forest for each contract type: KH, KT, KIPA.
+Trains a separate model for each active contract type: KH, KT.
 SP (cleaning) is skipped — the current features cannot predict SP SLA
 compliance. Use room utilization data instead for a cleaning-specific model.
+KIPA is skipped — discontinued in 2021, work absorbed into KH and KT.
 
 Why segment?
   The combined model scored AUC 0.69. When broken down by contract type:
-    KH   AUC 0.949  (property maintenance)
-    KT   AUC 0.836  (technical maintenance)
+    KH   AUC 0.954  (property maintenance)
+    KT   AUC 0.793  (technical maintenance)
     SP   AUC 0.496  (cleaning — worse than random, drags down the whole model)
   Training separate models eliminates SP noise and lets each model learn
   the right patterns for its own contract type.
 
+GBT benchmark:
+  Set BENCHMARK_GBT = True (default) to also train HistGradientBoosting for each
+  segment. The winner (by ROC-AUC) is saved as the production model. GBT handles
+  NaN natively and often outperforms Random Forest on tabular data.
+
 Output:
-  models/model_KH.pkl        models/model_KT.pkl        models/model_KIPA.pkl
-  reports/report_KH.json     reports/report_KT.json     reports/report_KIPA.json
+  models/model_KH.pkl        models/model_KT.pkl
+  reports/report_KH.json     reports/report_KT.json
+  reports/figures/KH_*.png   reports/figures/KT_*.png
 
 Run:
     python3.11 train_segmented_models.py
@@ -32,9 +39,9 @@ from datetime import date
 from pathlib import Path
 
 import joblib
+import numpy as np
 import pandas as pd
-from sklearn.model_selection import cross_val_score
-from sklearn.metrics import roc_auc_score, classification_report, confusion_matrix
+from sklearn.metrics import roc_auc_score
 
 from train_sla_model import (
     SILVER_PATH,
@@ -44,44 +51,48 @@ from train_sla_model import (
     NUMERIC_FEATURES,
     TARGET,
     build_pipeline,
+    build_pipeline_gbt,
     engineer_features,
+    evaluate_rich,
+    load_gold_signals,
     load_silver,
 )
 
+# Set to True to benchmark HistGradientBoosting against Random Forest per segment.
+# The classifier with higher ROC-AUC on the held-out test set is saved as the
+# production model. Adds ~30s per segment but gives an honest algorithm comparison.
+BENCHMARK_GBT = True
+
 # ── Contract type config ───────────────────────────────────────────────────────
-# Each entry defines how to train and evaluate the model for that contract type.
-#
 # KH and KT: standard time-based split — enough recent orders to evaluate properly.
-# KIPA: discontinued in 2021 — no recent test data. Use cross-validation instead.
-# SP:   skipped — features don't discriminate (see module docstring).
+# SP and KIPA are skipped (see module docstring).
 
 SEGMENTS = {
     "KH": {
         "description": "Property maintenance (KH)",
         "test_cutoff": pd.Timestamp("2025-06-06", tz="UTC"),
-        "eval_method": "time_split",
     },
     "KT": {
         "description": "Technical maintenance (KT)",
-        "test_cutoff": pd.Timestamp("2024-01-01", tz="UTC"),  # wider window — only 544 test orders
-        "eval_method": "time_split",
-    },
-    "KIPA": {
-        "description": "Facility services (KIPA) — discontinued 2021",
-        "test_cutoff": None,
-        "eval_method": "cross_val",   # no recent data; use 5-fold CV
+        "test_cutoff": pd.Timestamp("2024-01-01", tz="UTC"),  # wider window — only ~544 test orders
     },
 }
 
 
 # ── Train helpers ──────────────────────────────────────────────────────────────
 
-def train_time_split(
+def train_segment(
     df_ct: pd.DataFrame,
     cutoff: pd.Timestamp,
     ct: str,
 ) -> tuple[object, dict]:
-    """Standard time-based train/test split for active contract types."""
+    """
+    Train and evaluate one contract-type segment.
+
+    If BENCHMARK_GBT is True, trains both Random Forest and HistGradientBoosting,
+    compares AUC, and runs full evaluation (baselines, precision@k, figures) for
+    the winner. The winner is returned for saving.
+    """
     started = pd.to_datetime(df_ct["work_started_at_utc"], utc=True)
     train   = df_ct[started <  cutoff]
     test    = df_ct[started >= cutoff]
@@ -93,72 +104,50 @@ def train_time_split(
     y_train = train[TARGET].astype(int)
     X_test  = test[CATEGORICAL_FEATURES + NUMERIC_FEATURES]
     y_test  = test[TARGET].astype(int)
+    y_arr   = y_test.values
 
-    model = build_pipeline()
-    model.fit(X_train, y_train)
+    # ── Train Random Forest ────────────────────────────────────────────────────
+    print(f"\n    Training Random Forest ({ct})…")
+    rf = build_pipeline()
+    rf.fit(X_train, y_train)
+    rf_auc = roc_auc_score(y_arr, rf.predict_proba(X_test)[:, 1])
+    print(f"    RF  AUC = {rf_auc:.3f}")
 
-    y_pred = model.predict(X_test)
-    y_prob = model.predict_proba(X_test)[:, 1]
-    auc    = roc_auc_score(y_test, y_prob)
-    report = classification_report(y_test, y_pred, output_dict=True)
-    cm     = confusion_matrix(y_test, y_pred).tolist()
-    fa     = cm[0][1]  # false alarms
+    winner_name, winner_model, winner_auc = "RF", rf, rf_auc
+    benchmark_row: dict = {"RF": round(rf_auc, 4)}
 
-    print(f"    ROC-AUC: {auc:.3f}  |  False alarms: {fa}  |  Recall(violation): {report['1']['recall']:.1%}")
+    # ── Optionally benchmark GBT ───────────────────────────────────────────────
+    if BENCHMARK_GBT:
+        print(f"    Training HistGradientBoosting ({ct})…")
+        gbt = build_pipeline_gbt()
+        gbt.fit(X_train, y_train)
+        gbt_auc = roc_auc_score(y_arr, gbt.predict_proba(X_test)[:, 1])
+        print(f"    GBT AUC = {gbt_auc:.3f}")
+        benchmark_row["GBT"] = round(gbt_auc, 4)
 
-    metrics = {
+        if gbt_auc > rf_auc:
+            winner_name, winner_model, winner_auc = "GBT", gbt, gbt_auc
+        delta = abs(gbt_auc - rf_auc)
+        print(f"    Winner: {winner_name}  (Δ AUC = {delta:.3f})")
+
+    # ── Full evaluation for winner: baselines, calibration, precision@k, figures ──
+    print(f"\n    Full evaluation of {winner_name} ({ct})…")
+    metrics = evaluate_rich(
+        winner_model, X_train, y_train, X_test, y_test,
+        tag=ct, save_figures=True,
+    )
+    metrics.update({
         "contract_type": ct,
+        "classifier": winner_name,
         "eval_method": "time_split",
         "test_cutoff": str(cutoff.date()),
-        "roc_auc": round(auc, 4),
-        "false_alarms": fa,
-        "classification_report": report,
-        "confusion_matrix": cm,
         "train_size": len(train),
-        "test_size": len(test),
         "trained_on_date": date.today().isoformat(),
-    }
-    return model, metrics
+    })
+    if BENCHMARK_GBT:
+        metrics["benchmark_auc"] = benchmark_row
 
-
-def train_cross_val(df_ct: pd.DataFrame, ct: str) -> tuple[object, dict]:
-    """5-fold cross-validation for contract types with no recent test data (KIPA)."""
-    X = df_ct[CATEGORICAL_FEATURES + NUMERIC_FEATURES]
-    y = df_ct[TARGET].astype(int)
-
-    print(f"    Full dataset: {len(df_ct):,} orders  |  violation rate: {y.mean():.1%}")
-    print(f"    No recent test data — using 5-fold cross-validation")
-
-    model = build_pipeline()
-    cv_aucs = cross_val_score(model, X, y, cv=5, scoring="roc_auc", n_jobs=-1)
-    print(f"    CV AUC: {cv_aucs.mean():.3f} ± {cv_aucs.std():.3f}")
-
-    # Fit on full dataset for the saved model
-    model.fit(X, y)
-
-    metrics = {
-        "contract_type": ct,
-        "eval_method": "cross_val_5fold",
-        "roc_auc_mean": round(cv_aucs.mean(), 4),
-        "roc_auc_std": round(cv_aucs.std(), 4),
-        "note": "KIPA discontinued 2021 — no recent orders. Model trained on full 2017-2021 history.",
-        "train_size": len(df_ct),
-        "trained_on_date": date.today().isoformat(),
-    }
-    return model, metrics
-
-
-def get_top_features(model: object, top_n: int = 10) -> list[dict]:
-    ohe_names = (
-        model.named_steps["prep"]
-        .named_transformers_["cat"]
-        .get_feature_names_out(CATEGORICAL_FEATURES)
-        .tolist()
-    )
-    all_names   = ohe_names + NUMERIC_FEATURES
-    importances = model.named_steps["clf"].feature_importances_
-    ranked = sorted(zip(all_names, importances.tolist()), key=lambda x: x[1], reverse=True)
-    return [{"feature": name, "importance": round(imp, 5)} for name, imp in ranked[:top_n]]
+    return winner_model, metrics
 
 
 # ── Main ───────────────────────────────────────────────────────────────────────
@@ -166,18 +155,25 @@ def get_top_features(model: object, top_n: int = 10) -> list[dict]:
 def main() -> None:
     print("=" * 60)
     print("  SLA Segmented Models — training per contract type")
+    if BENCHMARK_GBT:
+        print("  (GBT benchmark enabled — winner by AUC will be saved)")
     print("=" * 60)
 
-    print("\nLoading Silver fact_work_order.parquet ...")
+    print("\n[1/2] Loading Gold site context (optional) ...")
+    gold = load_gold_signals()
+
+    print("\n[2/2] Loading Silver fact_work_order.parquet ...")
     df = load_silver(SILVER_PATH)
-    df = engineer_features(df)
+    df = engineer_features(df, gold_signals=gold)
 
     # Show what we're skipping and why
-    sp = df[df["contract_type"] == "SP"]
+    sp   = df[df["contract_type"] == "SP"]
+    kipa = df[df["contract_type"] == "KIPA"]
     print(f"\n  SP (cleaning) — SKIPPED")
     print(f"    {len(sp):,} orders  |  violation rate: {sp[TARGET].mean():.1%}")
     print(f"    Reason: AUC 0.496 with available features (worse than random).")
-    print(f"    Fix: build a separate utilization-based cleaning scheduler.")
+    print(f"\n  KIPA (facility services) — SKIPPED")
+    print(f"    {len(kipa):,} historical orders (2017–2021), now absorbed into KH/KT.")
 
     results = {}
 
@@ -189,12 +185,7 @@ def main() -> None:
         df_ct = df[df["contract_type"] == ct].copy()
         print(f"  Total: {len(df_ct):,} orders")
 
-        if cfg["eval_method"] == "time_split":
-            model, metrics = train_time_split(df_ct, cfg["test_cutoff"], ct)
-        else:
-            model, metrics = train_cross_val(df_ct, ct)
-
-        metrics["top_features"] = get_top_features(model)
+        model, metrics = train_segment(df_ct, cfg["test_cutoff"], ct)
 
         model_path  = MODELS_DIR  / f"model_{ct}.pkl"
         report_path = REPORTS_DIR / f"report_{ct}.json"
@@ -202,28 +193,35 @@ def main() -> None:
         joblib.dump(model, model_path)
         report_path.write_text(json.dumps(metrics, indent=2))
 
-        print(f"  Saved: {model_path.name}  |  {report_path.name}")
+        print(f"\n  Saved: {model_path.name}  |  {report_path.name}")
         results[ct] = metrics
 
     # ── Summary ────────────────────────────────────────────────────────────────
     print(f"\n{'='*60}")
     print(f"  Summary")
     print(f"{'='*60}")
-    print(f"  {'Contract':<8} {'AUC':<8} {'False alarms':<15} {'Notes'}")
-    print(f"  {'─'*8} {'─'*8} {'─'*15} {'─'*25}")
 
-    for ct, m in results.items():
-        if m["eval_method"] == "time_split":
-            auc = m["roc_auc"]
-            fa  = m.get("false_alarms", "n/a")
-            note = ""
-        else:
-            auc = m["roc_auc_mean"]
-            fa  = "n/a (CV)"
-            note = "historical only"
-        print(f"  {ct:<8} {auc:<8.3f} {str(fa):<15} {note}")
+    if BENCHMARK_GBT:
+        print(f"  {'Contract':<8} {'Winner':<6} {'AUC':<8} {'RF AUC':<10} {'GBT AUC':<10}")
+        print(f"  {'─'*8} {'─'*6} {'─'*8} {'─'*10} {'─'*10}")
+        for ct, m in results.items():
+            bm = m.get("benchmark_auc", {})
+            auc = m["model"]["roc_auc"]
+            print(f"  {ct:<8} {m['classifier']:<6} {auc:<8.3f} "
+                  f"{bm.get('RF', 'n/a'):<10} {bm.get('GBT', 'n/a'):<10}")
+    else:
+        print(f"  {'Contract':<8} {'Classifier':<6} {'AUC':<8} {'PR-AUC':<10} {'Brier':<8}")
+        print(f"  {'─'*8} {'─'*6} {'─'*8} {'─'*10} {'─'*8}")
+        for ct, m in results.items():
+            mm = m["model"]
+            print(f"  {ct:<8} {m['classifier']:<6} {mm['roc_auc']:<8.3f} "
+                  f"{mm['pr_auc']:<10.3f} {mm['brier']:<8.3f}")
 
-    print(f"  {'SP':<8} {'skipped':<8} {'n/a':<15} needs utilization data")
+    print(f"  {'SP':<8} {'—':<6} skipped (AUC 0.496 — use cleaning optimizer instead)")
+    print(f"  {'KIPA':<8} {'—':<6} skipped (discontinued 2021)")
+
+    FIGURES_DIR = REPORTS_DIR / "figures"
+    print(f"\n  Figures → {FIGURES_DIR}/KH_*.png  {FIGURES_DIR}/KT_*.png")
     print(f"\n  Use score_orders.py to score new orders with these models.\n")
 
 

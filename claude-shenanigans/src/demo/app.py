@@ -22,6 +22,8 @@ import pandas as pd
 import polars as pl
 import streamlit as st
 
+from src.features.cleaning import load_or_train_clusters, load_utilization, score_for_date
+
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "outputs"
 FIG = OUT / "figures"
@@ -73,6 +75,21 @@ BAND_BG = {"ELEVATED": "background-color:#ffcdd2", "NORMAL": "background-color:#
 BAND_EMOJI = {"ELEVATED": "⚠️", "NORMAL": "🟡", "CALM": "🟢"}
 
 
+@st.cache_data
+def _util_df() -> pd.DataFrame:
+    return load_utilization()
+
+
+@st.cache_resource
+def _clusters():
+    return load_or_train_clusters(_util_df())
+
+
+@st.cache_data
+def _score_date(target_date: pd.Timestamp) -> tuple[pd.DataFrame, pd.Timestamp]:
+    return score_for_date(_util_df(), target_date, _clusters())
+
+
 def reason_for(work_type: str, risk: float) -> str:
     if risk >= 80:
         return "Long/complex job that has historically slipped — start now."
@@ -96,7 +113,7 @@ m[1].metric("Work orders scored", f"{h['n_work_orders_scored']:,}")
 m[2].metric("Top-10% precision", f"{h['dispatch_top10pct_precision']*100:.0f}%", f"base {h['test_base_rate']*100:.0f}%")
 m[3].metric("Breaches caught (top-10%)", f"{h['dispatch_top10pct_breaches_caught']:,}")
 
-tabs = st.tabs(["🧑‍💼 Manager", "🧰 My tasks", "📈 Reliability", "🤖 Model card", "🧩 Unified data"])
+tabs = st.tabs(["🧑‍💼 Manager", "🧰 My tasks", "📈 Reliability", "🧹 Cleaning", "🤖 Model card", "🧩 Unified data"])
 
 # ============================================================================= 1. MANAGER
 with tabs[0]:
@@ -193,8 +210,67 @@ with tabs[2]:
         st.caption("Dashed line = elevated-risk band. Days above it are where a dynamic maintenance "
                    "calendar pulls work forward.")
 
-# ============================================================================= 4. MODEL CARD
+# ============================================================================= 4. CLEANING
 with tabs[3]:
+    st.subheader("Cleaning priority — Valmet Lentokentänkatu 11")
+    st.markdown(
+        "Replaces the fixed cleaning calendar with a **utilization-driven priority list**. "
+        "Every evening, each of the 38 meeting rooms gets an urgency score (0–100) combining "
+        "today's occupancy, the 3-day rolling average, and how many consecutive days the room "
+        "has been in use without a rest day."
+    )
+
+    util = _util_df()
+    date_min = util["utilization_date"].min().date()
+    date_max = util["utilization_date"].max().date()
+
+    picked = st.date_input(
+        "Score for date", value=date_max,
+        min_value=date_min, max_value=date_max,
+        help="Defaults to the latest date in the data. Use any working day to review past recommendations."
+    )
+    scored, scored_date = _score_date(pd.Timestamp(picked))
+
+    n_clean = int((scored["recommendation"] == "CLEAN").sum())
+    n_monitor = int((scored["recommendation"] == "MONITOR").sum())
+    n_skip = int((scored["recommendation"] == "SKIP").sum())
+    n_total = len(scored)
+
+    st.caption(f"Scored for: **{scored_date.date()}**")
+    c = st.columns(4)
+    c[0].metric("🔴 Clean tonight", n_clean, help="Rooms above urgency threshold 65 — must be cleaned")
+    c[1].metric("🟡 Monitor", n_monitor, help="Borderline — clean if capacity allows")
+    c[2].metric("🟢 Skip", n_skip, help="No cleaning needed today — save the effort")
+    c[3].metric("Effort saved", f"{n_skip/n_total:.0%}", help="Rooms skipped vs cleaning every room on a fixed calendar")
+
+    REC_BG = {"CLEAN": "background-color:#ffcdd2", "MONITOR": "background-color:#fff3cd", "SKIP": "background-color:#c8e6c9"}
+    TIER_BG = {"heavy": "background-color:#e3f2fd", "medium": "background-color:#f3e5f5", "light": "background-color:#f1f8e9"}
+
+    view = scored.rename(columns={
+        "room": "Room", "usage_tier": "Tier",
+        "today_pct": "Today %", "rolling_3d_mean": "3d avg %",
+        "accumulation_days": "Accum. days", "urgency_score": "Score",
+        "recommendation": "Action",
+    })
+    st.dataframe(
+        view.style
+            .map(lambda v: REC_BG.get(v, ""), subset=["Action"])
+            .map(lambda v: TIER_BG.get(v, ""), subset=["Tier"]),
+        hide_index=True, height=480, width="stretch",
+    )
+
+    with st.expander("Room usage tiers (trained on Jan 2024–May 2026 history)"):
+        clusters = _clusters()
+        profiles = clusters["profiles"]
+        for tier, emoji in [("heavy", "🔵"), ("medium", "🟣"), ("light", "🟤")]:
+            rooms = sorted(profiles[profiles["usage_tier"] == tier]["asset_name"].tolist())
+            mean_u = profiles[profiles["usage_tier"] == tier]["mean_pct"].mean()
+            st.markdown(f"**{emoji} {tier.upper()}** (avg {mean_u:.0f}% utilization): {', '.join(rooms)}")
+        st.caption("K-Means clustering on mean utilization, std dev, zero-day fraction, and high-day fraction. "
+                   "Retrain quarterly or when new rooms are added.")
+
+# ============================================================================= 5. MODEL CARD
+with tabs[4]:
     st.subheader("Model card — honest, held-out evaluation")
     ds = sla["dataset"]
     st.markdown(
@@ -222,8 +298,8 @@ with tabs[3]:
     g[1].image(str(FIG / "sla_calibration.png"), caption="Calibration — predicted ≈ observed")
     st.image(str(FIG / "sla_feature_importance.png"), caption="Permutation importance (held-out test)")
 
-# ============================================================================= 5. UNIFIED
-with tabs[4]:
+# ============================================================================= 6. UNIFIED
+with tabs[5]:
     st.subheader("One canonical model spans very different customers")
     st.markdown(
         "Luotea's value is **unifying fragmented facility data**. The same Gold schema and `site_id` "
