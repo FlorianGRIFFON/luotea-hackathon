@@ -77,17 +77,29 @@ creation; the breach is decided later by the actual finish time.
 fuses it with the other domains, so a single 0–100 number describes any site:
 
 ```
-RRI(site, day) = 100 × weighted mean over PRESENT components of:
-    maintenance_risk   = Σ model breach-probability of WOs created that day   (ERP)
-    alarm_pressure     = fire×3 + hvac×2 + other alarms                        (ERP)
-    energy_anomaly     = |kWh − 28-day median| / 28-day MAD                     (IoT)
-    incident_pressure  = incidents + 3 × unresolved incidents                   (IoT)
+RRI(site, day) = 7-day trailing mean of  [ 100 × weighted mean over PRESENT components of: ]
+    maintenance_risk   = MEAN model breach-probability of the day's WOs (absolute 0–1)  (ERP)
+    alarm_pressure     = fire×3 + hvac×2 + other alarms        → site 5–95 pct scale     (ERP)
+    energy_anomaly     = |kWh − 28-day median| / 28-day MAD    → site 5–95 pct scale     (IoT)
+    incident_pressure  = incidents + 3 × unresolved incidents  → site 5–95 pct scale     (IoT)
 ```
 
-Each component is percentile-ranked **within the site**, so RRI reads as *"how risky is today
-relative to this site's own normal"* — 90 means a top-decile risk day on **any** site, which is
-exactly the "distinguish normal variation from elevated risk" the brief asks for. Weights
-re-normalise over whichever components a site actually has, so partial coverage never breaks it.
+Design choices that make the index **honest and persistent** (and avoid an earlier flaw where it
+hovered at 50):
+
+- **Maintenance is an absolute probability level**, not a within-site rank. A site whose work
+  genuinely breaches ~50 % of the time sits near 50 *because that is its real risk* — and a calmer
+  site sits lower (e.g. the IoT sites land ~15–23). A rank would have forced every site's median to
+  50 and made it impossible to "stay high".
+- **Mean, not sum**, of breach probability → the score is work-order *intensity*, not volume, so it
+  doesn't oscillate with weekday/weekend backlog size.
+- **Degenerate components are dropped** (returned null), never pinned to the middle — e.g. Valmet's
+  always-zero incident count does not drag the score toward 50.
+- **7-day trailing smooth** → the index reflects *sustained* risk; a bad week stays elevated instead
+  of snapping back.
+- Secondary signals (alarm/energy/incident) have no natural 0–1 meaning, so they use a site
+  5–95-percentile scale; weights re-normalise over whichever components a site actually has, so
+  partial coverage never breaks it.
 
 ## Reproducibility & ops
 

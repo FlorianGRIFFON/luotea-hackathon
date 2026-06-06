@@ -17,8 +17,9 @@ All three were evaluated; two were built.
 A minimal FastAPI service that makes the demo production-minded.
 
 ```bash
-pip install -r creative-extensions/api/requirements.txt
-uvicorn creative-extensions.api.main:app --reload --port 8000
+# from claude-shenanigans/ (reuse project venv — macOS has pip3, not pip)
+.venv/bin/pip install -r creative-extensions/api/requirements.txt
+.venv/bin/uvicorn creative-extensions.api.main:app --reload --port 8000
 # → Swagger UI at http://localhost:8000/docs
 ```
 
@@ -45,8 +46,8 @@ PYTHONPATH=. ../luotea-pipeline/.venv/bin/python creative-extensions/calendar/ge
 ### Streamlit demo tab
 
 ```bash
-cd creative-extensions/calendar
-streamlit run demo_calendar.py
+# from claude-shenanigans/
+.venv/bin/streamlit run creative-extensions/calendar/demo_calendar.py
 ```
 
 ### What's in the calendar

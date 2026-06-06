@@ -19,6 +19,7 @@ from typing import Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
 from . import loader
@@ -75,6 +76,12 @@ class HealthResponse(BaseModel):
 
 
 # --------------------------------------------------------------------------- routes
+
+@app.get("/", include_in_schema=False)
+def root():
+    """Swagger UI is the entry point — no separate landing page."""
+    return RedirectResponse(url="/docs")
+
 
 @app.get("/health", response_model=HealthResponse, tags=["Meta"])
 def health():

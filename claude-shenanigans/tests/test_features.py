@@ -1,4 +1,5 @@
 """The leakage guarantee and time-split integrity are the credibility of the whole model."""
+import numpy as np
 import polars as pl
 import pytest
 
@@ -10,7 +11,8 @@ from src.features.work_orders import (
     split_xy,
     time_split,
 )
-from src.features.reliability_index import compute_reliability_index
+from src.features.reliability_index import compute_breach_load, compute_reliability_index
+from src.models.sla_risk import build_model
 
 
 @pytest.fixture(scope="module")
@@ -48,11 +50,35 @@ def test_split_xy_shapes(dataset):
     assert list(X.columns) == FEATURE_COLUMNS
 
 
-def test_reliability_index_bounded_and_cross_site():
-    rri = compute_reliability_index(load_daily_signals())
-    vals = rri["reliability_risk_index"].drop_nulls()
+def test_reliability_index_bounded_and_cross_site(dataset):
+    daily = load_daily_signals()
+    # ERP sites get their maintenance component from the model → train + score (realistic path)
+    train, _ = time_split(dataset)
+    X, y = split_xy(train)
+    model = type("M", (), {"pipeline": build_model().fit(X, y)})()
+    model.predict_proba = lambda Xp, p=model.pipeline: p.predict_proba(Xp)[:, 1]
+    breach_load = compute_breach_load(model, load_work_orders(), daily)
+
+    rri = compute_reliability_index(daily, breach_load)
+    vals = rri["reliability_risk_index"].drop_nulls().to_numpy()
     assert vals.min() >= 0 and vals.max() <= 100
-    # index is produced for both an ERP site and an IoT site
+    assert not np.isnan(vals).any(), "index must use real nulls, never float NaN"
+    # produced for both an ERP site (model-driven) and an IoT site (energy-driven)
     scored = rri.filter(pl.col("reliability_risk_index").is_not_null())["site_id"].unique().to_list()
     assert "site_valmet_l11" in scored
     assert "site_aurora" in scored
+
+
+def test_reliability_index_persists_not_mean_reverting(dataset):
+    """The index must reflect a site's true level, not snap back to 50 every day."""
+    train, _ = time_split(dataset)
+    X, y = split_xy(train)
+    pipe = build_model().fit(X, y)
+    model = type("M", (), {"predict_proba": lambda self, Xp: pipe.predict_proba(Xp)[:, 1]})()
+    rri = compute_reliability_index(load_daily_signals(),
+                                    compute_breach_load(model, load_work_orders(), load_daily_signals()))
+    means = (rri.filter(pl.col("reliability_risk_index").is_not_null())
+             .group_by("site_id").agg(pl.col("reliability_risk_index").mean()))
+    site_means = means["reliability_risk_index"].to_list()
+    # sites must NOT all collapse to ~50 — calm IoT sites should sit clearly below busy ERP sites
+    assert max(site_means) - min(site_means) > 15

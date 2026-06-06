@@ -168,9 +168,10 @@ with tabs[1]:
 with tabs[2]:
     st.subheader("Reliability Risk Index — one 0–100 scale, every site")
     st.markdown(
-        "**0 = a calm day, 100 = unusually high disruption risk for this site.** It blends whatever "
-        "signals a site has — work-order/SLA risk + alarms (Valmet ERP), energy anomaly + incidents "
-        "(NovaProp IoT) — so different customers land on the same comparable scale."
+        "**0 = calm, 100 = high disruption risk** (7-day smoothed). For ERP sites it tracks the "
+        "model's *absolute* mean SLA-breach probability, so a site that genuinely breaches ~50 % of "
+        "its work sits near 50 — while calmer IoT sites (energy + incidents) sit lower. The level is "
+        "real and persists; it doesn't snap back to the middle. Different customers, one scale."
     )
     rri = load_parquet(PRED / "reliability_index.parquet").dropna(subset=["reliability_risk_index"])
     sites = sorted(rri["site_id"].unique())

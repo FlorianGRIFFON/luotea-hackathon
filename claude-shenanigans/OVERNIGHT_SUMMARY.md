@@ -101,9 +101,10 @@ Artifacts:
 
 - Partial site coverage is shown as real nulls, never faked.
 - All headline numbers come from a leakage-free, time-based hold-out — not in-sample.
-- The Reliability Index is a *within-site relative-risk* percentile (0 = calmest, 100 = riskiest
-  day for that site), which is exactly "distinguish normal variation from elevated risk"; this is
-  why per-site means sit near 50 by construction.
+- The Reliability Index puts the **model's mean breach probability on an absolute 0–100 scale**
+  (smoothed over 7 days), so a site that genuinely breaches ~50 % of its work sits near 50 *because
+  that is its real risk* while calmer IoT sites sit ~15–23 — it does **not** revert to 50 by
+  construction. Degenerate/absent signals are dropped, not pinned to the middle.
 - One environment change outside `claude-shenanigans/`: set
   `worktree.bgIsolation = "none"` in `.claude/settings.local.json` so edits land in the
   (untracked) working copy — a git worktree would not contain the untracked `claude-shenanigans/`.

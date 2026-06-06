@@ -20,10 +20,12 @@ claude-shenanigans/RUN.md
 # luotea-pipeline
 luotea-pipeline/data/
 
-# claude-shenanigans outputs
-claude-shenanigans/outputs/models/*.pkl
-claude-shenanigans/outputs/models/*.joblib
-claude-shenanigans/outputs/figures/*.png
+# claude-shenanigans generated outputs (run `make demo` to rebuild)
+claude-shenanigans/outputs/models/
+claude-shenanigans/outputs/figures/
+claude-shenanigans/outputs/metrics/
+claude-shenanigans/outputs/predictions/
+claude-shenanigans/outputs/operations_briefing.md
 
 # claude-shenanigans local scratch notes
 claude-shenanigans/creative-extensions/CRAZY_IDEAS.md
