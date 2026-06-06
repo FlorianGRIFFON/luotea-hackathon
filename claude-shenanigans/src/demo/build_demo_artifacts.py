@@ -32,6 +32,54 @@ from src.models.sla_risk import SLARiskModel
 
 BLUE, RED, ORANGE, GREEN = "#1565C0", "#E53935", "#FB8C00", "#2E7D32"
 
+# fmt: off
+_WORK_TYPE_SEVERITY: dict[str, str] = {
+    "Repairs and maintenance building automation":                                        "High",
+    "Project services property operation and maintenance":                               "Medium",
+    "Periodic maintenance heating and water systems":                                    "Medium",
+    "Project services ventilation":                                                      "Medium",
+    "Machine-based winter maintenance of outdoor areas":                                 "High",
+    "Repairs and maintenance heating and water systems":                                 "High",
+    "Repairs and maintenance Smartti":                                                   "Medium",
+    "Cleaning services":                                                                 "Low",
+    "Repairs and maintenance expert services":                                           "Medium",
+    "Project services building automation":                                              "Medium",
+    "Landscape construction services":                                                   "Low",
+    "Periodic maintenance property operation and maintenance":                           "Medium",
+    "Additional landscaping services":                                                   "Low",
+    "Project services heating and water systems":                                        "Medium",
+    "Periodic maintenance building automation":                                          "Medium",
+    "Energy management":                                                                 "Medium",
+    "Repairs and maintenance sprinklers and other automatic fire extinguishing equipment": "Critical",
+    "Project services expert services":                                                  "Medium",
+    "Additional property maintenance services":                                          "Low",
+    "Winter maintenance of outdoor areas":                                               "High",
+    "Project services electrical":                                                       "Medium",
+    "Repairs and maintenance property operation and maintenance":                        "Medium",
+    "Smartti building automation":                                                       "Medium",
+    "Periodic maintenance expert services":                                              "Medium",
+    "Repairs and maintenance fire safety":                                               "Critical",
+    "Repairs and maintenance fire alarm systems":                                        "Critical",
+    "Additional cleaning services":                                                      "Low",
+    "Periodic maintenance sprinklers and other automatic fire extinguishing equipment":  "Critical",
+    "Outdoor area and green area maintenance":                                           "Low",
+    "Technical maintenance and operational maintenance":                                 "High",
+    "Periodic maintenance electrical":                                                   "Medium",
+    "Unclassified":                                                                      "Low",
+    "Repairs and maintenance ventilation":                                               "High",
+    "Periodic maintenance ventilation":                                                  "Medium",
+    "Periodic maintenance fire safety":                                                  "Critical",
+    "Periodic maintenance fire alarm systems":                                           "Critical",
+    "Repairs and maintenance electrical":                                                "High",
+    "Workplace and premises services":                                                   "Low",
+    "Security services":                                                                 "Critical",
+}
+# fmt: on
+
+_ACTION_ORDER = {"Urgent": 0, "Monitor": 1, "Low priority": 2}
+_SEVERITY_ORDER = {"Critical": 0, "High": 1, "Medium": 2, "Low": 3}
+_RISK_ORDER = {"HIGH": 0, "MEDIUM": 1, "LOW": 2}
+
 
 def ensure_model() -> SLARiskModel:
     path = MODELS_DIR / "sla_risk_model.pkl"
@@ -69,9 +117,34 @@ def build_dispatch_sample(site_id: str = SITE_VALMET_L11, window: int = 40) -> p
             pl.when(pl.col("breach_probability") >= 0.66).then(pl.lit("HIGH"))
             .when(pl.col("breach_probability") >= 0.45).then(pl.lit("MEDIUM"))
             .otherwise(pl.lit("LOW")).alias("risk_band"),
+            pl.col("work_type_eng").replace(_WORK_TYPE_SEVERITY).alias("severity"),
         )
-        .select(["wo_no", "work_type_eng", "priority_id_str", "breach_risk_pct",
-                 "risk_band", "is_sla_violation"])
+        .with_columns(
+            # Severity-first action matrix:
+            #           HIGH risk   MEDIUM risk  LOW risk
+            # Critical  ACT NOW     ACT NOW      MONITOR
+            # High      ACT NOW     MONITOR      MONITOR
+            # Medium    MONITOR     MONITOR      DEFER
+            # Low       MONITOR     DEFER        DEFER
+            pl.when(
+                ((pl.col("severity") == "Critical") & (pl.col("risk_band") != "LOW")) |
+                ((pl.col("severity") == "High") & (pl.col("risk_band") == "HIGH"))
+            ).then(pl.lit("Urgent"))
+            .when(
+                ((pl.col("severity") == "Medium") & (pl.col("risk_band") == "LOW")) |
+                ((pl.col("severity") == "Low") & (pl.col("risk_band") != "HIGH"))
+            ).then(pl.lit("Low priority"))
+            .otherwise(pl.lit("Monitor")).alias("action"),
+        )
+        .with_columns(
+            pl.col("action").replace(_ACTION_ORDER).cast(pl.Int8).alias("_a"),
+            pl.col("severity").replace(_SEVERITY_ORDER).cast(pl.Int8).alias("_s"),
+            pl.col("risk_band").replace(_RISK_ORDER).cast(pl.Int8).alias("_r"),
+        )
+        .sort(["_a", "_s", "_r"])
+        .drop(["_a", "_s", "_r"])
+        .select(["wo_no", "site_id", "work_type_eng", "priority_id_str", "breach_risk_pct",
+                 "risk_band", "severity", "action", "is_sla_violation"])
     )
     ranked.write_parquet(PREDICTIONS_DIR / f"dispatch_today_{site_id}.parquet")
     return ranked.with_columns(pl.lit(day).alias("day"))
@@ -141,6 +214,16 @@ def plot_dispatch_table(day_df: pl.DataFrame, site_id: str):
 def build_task_assignments(dispatch: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFrame]:
     """Attribute the risk-ranked backlog to the crew (manager + maintainer views)."""
     assigned = assign_tasks(dispatch.drop("day") if "day" in dispatch.columns else dispatch)
+    assigned = (
+        assigned
+        .with_columns(
+            pl.col("action").replace(_ACTION_ORDER).cast(pl.Int8).alias("_a"),
+            pl.col("severity").replace(_SEVERITY_ORDER).cast(pl.Int8).alias("_s"),
+            pl.col("risk_band").replace(_RISK_ORDER).cast(pl.Int8).alias("_r"),
+        )
+        .sort(["_a", "_s", "_r"])
+        .drop(["_a", "_s", "_r"])
+    )
     assigned.write_parquet(PREDICTIONS_DIR / "task_assignments.parquet")
     workload = crew_workload(assigned)
     workload.write_parquet(PREDICTIONS_DIR / "crew_workload.parquet")
