@@ -443,7 +443,8 @@ def run():
     summary["crew"] = {
         "workers": workload.height,
         "tasks_assigned": assigned.height,
-        "high_risk_tasks": int((assigned["risk_band"] == "HIGH").sum()),
+        "urgent_tasks": int((assigned["action"] == "Urgent").sum()),
+        "monitor_tasks": int((assigned["action"] == "Monitor").sum()),
     }
     (METRICS_DIR / "demo_summary.json").write_text(json.dumps(summary, indent=2))
     print(json.dumps(summary["crew"], indent=2))

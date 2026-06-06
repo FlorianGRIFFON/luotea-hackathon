@@ -284,10 +284,7 @@ with tabs[0]:
         "- Trains in **seconds** and runs on a laptop or a phone. The same 0 to 100 index gives "
         "**cross-customer benchmarking** for free as more sites are onboarded."
     )
-    st.markdown(
-        "**Walk the demo →** *Manager* (the global queue + reliability index) · *My tasks* "
-        "(a maintainer's phone view) · *Data & model* (one schema, honest evaluation)."
-    )
+    gap(24)
 
 # ============================================================================= 2. MANAGER
 with tabs[1]:
@@ -300,32 +297,29 @@ with tabs[1]:
         c.metric(f"{BAND_EMOJI.get(r['band'],'')} {fmt_site(r['site_id'])}",
                  f"{r['rri']:.0f}")
 
+    gap()
+    st.markdown("**Reliability over time:** the trend behind today's numbers. One score per "
+                "site, 0–100, same scale for every customer; pick sites to compare.")
+    render_reliability_chart(key="manager")
+
     st.divider()
-    left, right = st.columns([1, 1], vertical_alignment="center")
-    with left:
-        st.subheader("Crew workload")
-        wl = load_parquet(PRED / "crew_workload.parquet").rename(columns={
-            "assigned_to": "Worker", "role": "Role", "tasks": "Tasks",
-            "high_risk": "High-risk", "top_risk_pct": "Top risk %"})
-        st.dataframe(wl, hide_index=True, width="stretch")
-    with right:
-        crew = summary.get("crew", {})
-        cc = st.columns(3)
-        cc[0].metric("Tasks", crew.get("tasks_assigned", "—"))
-        cc[1].metric("High-risk", crew.get("high_risk_tasks", "—"))
-        cc[2].metric("Crew", crew.get("workers", "—"))
+    st.subheader("Crew workload")
+    crew = summary.get("crew", {})
+    cc = st.columns(4)
+    cc[0].metric("Urgent tasks", crew.get("urgent_tasks", "—"),
+                 help="Act now: high breach risk combined with high job severity")
+    cc[1].metric("Monitor tasks", crew.get("monitor_tasks", "—"),
+                 help="Keep an eye on these; clear if capacity allows")
+    cc[2].metric("Total tasks", crew.get("tasks_assigned", "—"))
+    cc[3].metric("Crew", crew.get("workers", "—"))
+    gap(6)
+    wl = load_parquet(PRED / "crew_workload.parquet").rename(columns={
+        "assigned_to": "Worker", "role": "Role", "tasks": "Tasks",
+        "urgent": "Urgent", "monitor": "Monitor", "low_priority": "Low priority"})
+    st.dataframe(wl, hide_index=True, width="stretch")
 
     st.markdown("**Risk-ranked queue (attributed)** — ordered by recommended action:")
     render_risk_queue(height=380)
-
-    st.divider()
-    st.markdown(
-        "### Reliability over time\n\n"
-        "One score per site, 0–100.<br>"
-        "Same scale for every customer; pick sites below to compare.",
-        unsafe_allow_html=True,
-    )
-    render_reliability_chart(key="manager")
 
 # ============================================================================= 3. MY TASKS
 with tabs[2]:
@@ -338,7 +332,7 @@ with tabs[2]:
 
     mine = asn[asn["assigned_to"] == who].copy()
     k = st.columns(3)
-    k[0].metric("Tasks today", len(mine))
+    k[0].metric("Tasks", len(mine))
     k[1].metric("Urgent", int((mine["action"] == "Urgent").sum()))
     k[2].metric("Monitor", int((mine["action"] == "Monitor").sum()))
 
@@ -346,7 +340,7 @@ with tabs[2]:
     view = mine[["wo_no", "site_id", "work_type_eng", "action"]].rename(columns={
         "wo_no": "WO #", "site_id": "Site", "work_type_eng": "Task", "action": "Action"})
     st.dataframe(view.style.map(lambda v: ACTION_BG.get(v, ""), subset=["Action"]),
-                 hide_index=True, height=300, width="stretch")
+                 hide_index=True, height=440, width="stretch")
 
 # ============================================================================= 4. DATA & MODEL
 with tabs[3]:

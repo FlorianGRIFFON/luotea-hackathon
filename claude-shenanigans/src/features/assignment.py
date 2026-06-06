@@ -74,13 +74,14 @@ def assign_tasks(dispatch: pl.DataFrame) -> pl.DataFrame:
 
 
 def crew_workload(assigned: pl.DataFrame) -> pl.DataFrame:
-    """Per-worker summary for the manager view."""
+    """Per-worker summary for the manager view: total tasks split by recommended action."""
     return (
         assigned.group_by("assigned_to", "role")
         .agg(
             pl.len().alias("tasks"),
-            (pl.col("risk_band") == "HIGH").sum().alias("high_risk"),
-            pl.col("breach_risk_pct").max().round(0).alias("top_risk_pct"),
+            (pl.col("action") == "Urgent").sum().alias("urgent"),
+            (pl.col("action") == "Monitor").sum().alias("monitor"),
+            (pl.col("action") == "Low priority").sum().alias("low_priority"),
         )
-        .sort(["high_risk", "tasks"], descending=True)
+        .sort(["urgent", "tasks"], descending=True)
     )
