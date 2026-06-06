@@ -22,7 +22,7 @@ from pathlib import Path
 import joblib
 import pandas as pd
 
-from train_sla_model import CATEGORICAL_FEATURES, NUMERIC_FEATURES, engineer_features
+from train_sla_model import CATEGORICAL_FEATURES, NUMERIC_FEATURES, engineer_features, load_gold_signals
 
 REPO_ROOT   = Path(__file__).resolve().parents[2]
 SILVER_PATH = REPO_ROOT / "luotea-pipeline" / "data" / "silver" / "fact_work_order" / "fact_work_order.parquet"
@@ -31,8 +31,8 @@ MODELS_DIR  = Path(__file__).parent.parent / "models"
 RISK_HIGH = 0.65
 RISK_LOW  = 0.35
 
-# Contract types that have a trained segmented model
-MODELLED_CONTRACTS = ["KH", "KT", "KIPA"]
+# Active contract types with trained models (KIPA discontinued — absorbed into KH/KT)
+MODELLED_CONTRACTS = ["KH", "KT"]
 
 
 # ── Load models ────────────────────────────────────────────────────────────────
@@ -142,9 +142,10 @@ def main() -> None:
     for ct, m in models.items():
         print(f"  model_{ct}.pkl loaded")
 
-    print("\n[2/3] Loading Silver orders ...")
+    print("\n[2/3] Loading Gold site context + Silver orders ...")
+    gold = load_gold_signals()
     df = pd.read_parquet(SILVER_PATH)
-    df = engineer_features(df)
+    df = engineer_features(df, gold_signals=gold)
     started = pd.to_datetime(df["work_started_at_utc"], utc=True)
     df = df[started >= cutoff].copy()
     print(f"  {len(df):,} orders since {cutoff.date()}")

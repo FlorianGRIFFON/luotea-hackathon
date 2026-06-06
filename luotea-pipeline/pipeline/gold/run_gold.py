@@ -13,6 +13,7 @@ from pipeline.config import GOLD_DIR
 from pipeline.gold.event_timeline import build_event_timeline
 from pipeline.gold.io import write_gold
 from pipeline.gold.site_daily_signals import build_site_daily_signals
+from pipeline.gold.site_rolling_context import build_site_rolling_context
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,8 @@ def run_gold(*, as_of_date: date | None = None) -> list[GoldTableResult]:
     builds = [
         ("site_daily_signals", lambda: build_site_daily_signals(as_of_date=as_of_date)),
         ("event_timeline", build_event_timeline),
+        # site_rolling_context reads site_daily_signals — must come last
+        ("site_rolling_context", build_site_rolling_context),
     ]
 
     for table_name, builder in builds:

@@ -77,7 +77,7 @@ Cleaning includes: BOM stripping, encoding detection, `"NULL"` → null, Finnish
 
 ### 3. Build marts (Gold)
 
-Joins Silver tables into two main deliverables:
+Joins and aggregates Silver tables into three deliverables. Build order matters: `site_rolling_context` reads from `site_daily_signals` and must be built last.
 
 #### `site_daily_signals.parquet`
 
@@ -88,11 +88,28 @@ Joins Silver tables into two main deliverables:
 - KONE: `avg_elevator_occupancy`
 - Cleaning: `avg_room_utilization_pct`, `avg_desk_utilization_pct`
 
-Sites without a given data source keep **null** for those metrics (never dropped).
+Sites without a given data source keep **null** for those metrics (never dropped). Used for dashboards, trend analysis, and as the input to `site_rolling_context`.
 
 #### `event_timeline.parquet`
 
 A unified timeline of **alarms, work order lifecycle events, and Smartti incidents** with `event_type`, `severity`, and `timestamp_utc` (~107k rows).
+
+#### `site_rolling_context.parquet`
+
+**One row per `site_id × date`** — rolling 7-day aggregates of site signals, purpose-built as a feature table for ML models.
+
+Built from `site_daily_signals` by computing a 7-day rolling window per site, sorted chronologically:
+
+| Column | Aggregation | What it captures |
+|--------|-------------|-----------------|
+| `open_wo_7d_avg` | Mean | Average open work orders — team workload trend |
+| `sla_violations_7d` | Sum | Total SLA violations — cumulative pressure |
+| `alarms_7d_avg` | Mean | Average daily alarms — site noise level |
+| `fire_alarms_7d` | Sum | Total fire/priority-1 alarms — safety events |
+| `incidents_7d` | Sum | Total Smartti incidents — cross-source signal |
+| `utilization_7d_avg` | Mean | Average room utilization — building busyness trend |
+
+Means are used for level signals; sums for rare event signals where the cumulative count matters more than the daily average. The ML layer joins on `work_order.site_id + (start_date − 1 day)` to get pre-computed context with no leakage.
 
 ### 4. Validate (Quality / QA)
 
@@ -192,9 +209,14 @@ Together they prove the pipeline can unify **real ERP data** and **anonymized Io
 
 ### Foundation for ML and BI
 
-Gold `site_daily_signals` is designed as a **feature table** — daily metrics per site suitable for:
+The Gold layer provides two complementary feature sources for ML:
 
-- Anomaly detection (alarm spikes vs utilization)
+- `site_daily_signals` — raw daily metrics per site, suitable for dashboards, anomaly detection, energy/operations reporting, and as a source for derived tables.
+- `site_rolling_context` — pre-computed 7-day rolling aggregates, ready to join directly into ML feature pipelines without any additional transformation. Currently used by the SLA violation prediction models (`luotea-ml/`).
+
+Both tables use `site_id + date` as the join key, making them suitable for:
+
+- Anomaly detection (alarm spikes vs utilization trends)
 - Predictive maintenance signals
 - Energy/operations dashboards
 - Cross-customer benchmarking (when more sites are mapped)
@@ -243,6 +265,7 @@ python -m pipeline validate --date 2026-06-05
 |------|------|
 | Daily site dashboard data | `data/gold/site_daily_signals.parquet` |
 | Event timeline | `data/gold/event_timeline.parquet` |
+| ML site context features (7-day rolling) | `data/gold/site_rolling_context.parquet` |
 | Cleaned row-level tables | `data/silver/{table}/{table}.parquet` |
 | Raw landed copies | `data/bronze/{source}/{date}/` |
 | QA pass/fail report | `data/qa/qa_report_{date}.json` |
@@ -267,6 +290,7 @@ Luotea-Hackathon-2026/          Raw CSV & JSON (unchanged)
         │
         ▼ gold
    data/gold/                    site_daily_signals, event_timeline
+                                 site_rolling_context  (built from site_daily_signals)
         │
         ▼ qa / validate
    data/qa/                      qa_report_{date}.json
