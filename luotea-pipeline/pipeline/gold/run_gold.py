@@ -11,6 +11,7 @@ import polars as pl
 
 from pipeline.config import GOLD_DIR
 from pipeline.gold.event_timeline import build_event_timeline
+from pipeline.gold.fact_work_order import build_fact_work_order
 from pipeline.gold.io import write_gold
 from pipeline.gold.site_daily_signals import build_site_daily_signals
 from pipeline.gold.site_rolling_context import build_site_rolling_context
@@ -47,6 +48,7 @@ def run_gold(*, as_of_date: date | None = None) -> list[GoldTableResult]:
     results: list[GoldTableResult] = []
 
     builds = [
+        ("fact_work_order", build_fact_work_order),
         ("site_daily_signals", lambda: build_site_daily_signals(as_of_date=as_of_date)),
         ("event_timeline", build_event_timeline),
         # site_rolling_context reads site_daily_signals — must come last

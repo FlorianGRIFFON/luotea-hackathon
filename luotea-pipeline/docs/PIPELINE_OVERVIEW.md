@@ -77,7 +77,20 @@ Cleaning includes: BOM stripping, encoding detection, `"NULL"` → null, Finnish
 
 ### 3. Build marts (Gold)
 
-Joins and aggregates Silver tables into three deliverables. Build order matters: `site_rolling_context` reads from `site_daily_signals` and must be built last.
+Joins and aggregates Silver tables into four deliverables. Build order matters: `site_rolling_context` reads from `site_daily_signals` and must be built last.
+
+#### `fact_work_order.parquet`
+
+Silver `fact_work_order` enriched with a `severity` column that classifies each work type into one of four business tiers:
+
+| Severity | Description | Examples |
+|----------|-------------|---------|
+| `Critical` | Life safety & fire compliance — highest legal/financial penalties | Fire safety, fire alarms, sprinklers, security services |
+| `High` | Core habitability & urgent safety — risk of building shutdown or injury | Electrical, heating & water, ventilation, winter maintenance |
+| `Medium` | Preventative maintenance & project services — operational backlog risk | Periodic/preventive maintenance, project services, energy management |
+| `Low` | Routine & aesthetic maintenance — minor SLA impact | Cleaning, landscaping, workplace & premises services |
+
+Severity lives in Gold (not Silver) because it is a business classification, not a data-cleaning operation — updating the taxonomy requires only a Gold rebuild.
 
 #### `site_daily_signals.parquet`
 
@@ -263,6 +276,7 @@ python -m pipeline validate --date 2026-06-05
 
 | Need | Path |
 |------|------|
+| Work orders with severity classification | `data/gold/fact_work_order.parquet` |
 | Daily site dashboard data | `data/gold/site_daily_signals.parquet` |
 | Event timeline | `data/gold/event_timeline.parquet` |
 | ML site context features (7-day rolling) | `data/gold/site_rolling_context.parquet` |
@@ -289,7 +303,8 @@ Luotea-Hackathon-2026/          Raw CSV & JSON (unchanged)
                            fact_occupancy, fact_utilization
         │
         ▼ gold
-   data/gold/                    site_daily_signals, event_timeline
+   data/gold/                    fact_work_order  (Silver + severity classification)
+                                 site_daily_signals, event_timeline
                                  site_rolling_context  (built from site_daily_signals)
         │
         ▼ qa / validate

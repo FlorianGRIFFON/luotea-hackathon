@@ -49,6 +49,45 @@ models:
       - name: as_of_date
         description: Snapshot date when Gold table was built (reproducibility)
 
+  - name: fact_work_order
+    description: >
+      Silver fact_work_order enriched with a business severity classification
+      derived from work_type_eng. All other columns are passed through unchanged
+      from the Silver table. Severity is defined at the Gold layer because it is
+      a business rule — not a data-cleaning concern — and can be updated without
+      re-running Silver transforms.
+    grain: one row per wo_no
+    primary_key: [wo_no]
+    columns:
+      - name: wo_no
+        description: Work order number (unique)
+        tests: [not_null, unique]
+      - name: severity
+        description: >
+          Business severity tier derived from work_type_eng.
+          Critical — life safety & fire compliance (fire safety, fire alarms, sprinklers, security).
+          High — core habitability & urgent safety (electrical, heating/water, ventilation, winter maintenance).
+          Medium — preventative maintenance & project services (periodic maintenance, project services, energy management).
+          Low — routine & aesthetic maintenance (cleaning, landscaping, workplace services).
+          Null for any work_type_eng not present in the mapping.
+        tests: [accepted_values: [Critical, High, Medium, Low]]
+      - name: work_type_eng
+        description: English work type description (source value, unchanged from Silver)
+      - name: work_type_fin
+        description: Finnish work type description (source value, unchanged from Silver)
+      - name: site_id
+        description: Canonical site identifier from mappings/sites.yaml
+      - name: work_started_at_utc
+        description: Work start timestamp in UTC
+        tests: [not_null]
+      - name: work_finished_at_utc
+        description: Work finish timestamp in UTC
+        tests: [not_null]
+      - name: is_sla_violation
+        description: True if the work order breached its SLA deadline
+      - name: source_system
+        description: Always erp_work_orders
+
   - name: event_timeline
     description: >
       Unified chronological stream of operational events from ERP alarms,
@@ -78,3 +117,33 @@ models:
         tests: [not_null]
       - name: source_record_id
         description: Primary key in the source Silver fact table
+
+  - name: site_rolling_context
+    description: >
+      Rolling 7-day aggregates of site_daily_signals, purpose-built as a
+      feature table for ML models. One row per site_id × as_of_date. The ML
+      layer joins on work_order.site_id + (start_date − 1 day) to get
+      pre-computed site context without data leakage. Must be built after
+      site_daily_signals. Level signals use rolling means; rare event signals
+      use rolling sums (cumulative count matters more than daily average).
+    grain: one row per site_id × as_of_date
+    primary_key: [site_id, as_of_date]
+    columns:
+      - name: site_id
+        description: Canonical site identifier from mappings/sites.yaml
+        tests: [not_null]
+      - name: as_of_date
+        description: Calendar date (aliased from signal_date in site_daily_signals)
+        tests: [not_null]
+      - name: open_wo_7d_avg
+        description: 7-day rolling mean of open_work_orders — workload trend
+      - name: sla_violations_7d
+        description: 7-day rolling sum of sla_violations — cumulative SLA pressure
+      - name: alarms_7d_avg
+        description: 7-day rolling mean of alarm_count — site noise level
+      - name: fire_alarms_7d
+        description: 7-day rolling sum of fire_alarm_count — safety event accumulation
+      - name: incidents_7d
+        description: 7-day rolling sum of incident_count — cross-source signal
+      - name: utilization_7d_avg
+        description: 7-day rolling mean of avg_room_utilization_pct — building busyness trend
