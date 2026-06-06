@@ -1,7 +1,8 @@
 # Overnight summary — Luotea Reliability Risk Engine
 
-**Status: complete.** All phases done (understand → TODO → implement → document → slides).
-12/12 tests green · `make demo` runs end-to-end · Streamlit app verified (0 runtime exceptions).
+**Status: complete.** All phases done (understand → TODO → implement → document → pitch).
+16/16 tests green · `make demo` runs end-to-end · Streamlit app verified (0 runtime exceptions).
+The **app is the presentation** (🎤 Story tab) — no separate slide deck.
 
 ---
 
@@ -46,17 +47,17 @@ stack on phones — field staff use handsets), and a plain-text morning briefing
 | Train + evaluate + figures | `src/models/train_sla.py` |
 | Supporting anomaly flag (Isolation Forest) | `src/models/anomaly.py`, `src/models/train.py` |
 | Demo artifact builder (index, dispatch, assignments, briefing) | `src/demo/build_demo_artifacts.py` |
-| Streamlit app — **5 tabs, role-based, mobile-responsive** | `src/demo/app.py` |
-| Tests (15) | `tests/test_loaders.py`, `test_features.py`, `test_model.py`, `test_assignment.py` |
+| Streamlit app — **6 tabs incl. 🎤 Story (the pitch), role-based, mobile-responsive** | `src/demo/app.py` |
+| Tests (16) | `tests/test_loaders.py`, `test_features.py`, `test_model.py`, `test_assignment.py` |
 | One-command workflows | `Makefile`, `requirements.txt` |
 | Docs | `docs/CONTEXT.md`, `HACKATHON_CRITERIA.md`, `ARCHITECTURE.md`, `REAL_WORLD.md`, `SCALING.md` |
-| Slides | `presentation/slides.md` (+ rendered `slides.html`), `SPEAKER_NOTES.md` |
+| Pitch | **App is the presentation** (🎤 Story tab); `presentation/SPEAKER_NOTES.md` = run sheet |
 
 ## 3. How to run the demo
 
 ```bash
 cd claude-shenanigans
-make demo     # verify Gold ▶ train ▶ build index & dispatch ▶ 12 tests   (~10s)
+make demo     # verify Gold ▶ train ▶ build index & dispatch ▶ 16 tests   (~15s)
 make app      # launch Streamlit at http://localhost:8501
 ```
 
@@ -84,18 +85,18 @@ Artifacts:
 
 ## 5. What's left for humans before the pitch
 
-- **Rehearse** the 5-minute pitch with `presentation/SPEAKER_NOTES.md` (timings + Q&A prepared).
-- **Optional polish:** add team names to slide 1; re-render with `npx @marp-team/marp-cli
-  presentation/slides.md -o presentation/slides.html` if you edit slides.
-- **Live demo:** `make app` — lead with tab 2 (dispatch), then tab 3 (honest model card).
+- **Rehearse** with `presentation/SPEAKER_NOTES.md` — a tab-by-tab 5-min run sheet for the app.
+- **Optional polish:** add the team name to the 🎤 Story tab header in `src/demo/app.py`.
+- **Present from the app:** `make app`, then walk 🎤 Story → 🧑‍💼 Manager → 🧰 My tasks →
+  📈 Reliability → 🤖 Model card → 🧩 Unified data.
 - **Decide framing of the SLA-window feature** if challenged — notes in `SPEAKER_NOTES.md` and
   `docs/ARCHITECTURE.md` explain why it's an operational insight, not a leak.
 
-## 6. Slides
+## 6. Presentation
 
-- Source: `presentation/slides.md` (Marp, 10 slides)
-- Rendered: `presentation/slides.html` (self-contained, embeds the figures)
-- Speaker notes + timing + jury Q&A: `presentation/SPEAKER_NOTES.md`
+- **The app is the deck** — `src/demo/app.py`, lead **🎤 Story** tab (problem → solution → metrics).
+- Run sheet + timings + jury Q&A + offline fallback: `presentation/SPEAKER_NOTES.md`.
+- The Marp slide deck and rendered HTML were **retired** (one artifact, no drift).
 
 ## 7. Notes / honesty for the record
 

@@ -1,38 +1,43 @@
-# Speaker notes — 5-minute pitch
+# Pitch guide — the app *is* the presentation
 
-Render slides with [Marp](https://marp.app): `marp presentation/slides.md -o slides.html`
-(or the VS Code Marp extension). Figures are referenced from `../outputs/figures/` — run
-`make predict` first so they exist.
+We retired the slide deck: the **Streamlit app drives the whole pitch**. One artifact, nothing to
+keep in sync, and the strongest possible signal — "this is real and it runs."
 
-**Timing target: 5:00. Practice the transitions in bold.**
+```bash
+cd claude-shenanigans
+make demo     # ensure artifacts are fresh (verify ▶ train ▶ predict ▶ tests)
+make app      # open the app — present from here
+```
 
-| # | Slide | ~Time | Say this | 
-|---|-------|------:|----------|
-| 1 | Title | 0:20 | "We move maintenance from the calendar to real risk. Three words: **data → signals → decisions**." |
-| 2 | Problem | 0:40 | Hammer the brief's own point: the cost isn't one big failure, it's **recurring small SLA breaches** no one sees coming. Today's data reports, it doesn't guide. |
-| 3 | Solution | 0:35 | "The pipeline already did the hard part — unifying six fragmented sources. **We add the predictive layer on top, read-only.**" Point at the two-site chart: same 0–100 scale. |
-| 4 | Data | 0:35 | Be honest about coverage — Valmet has ERP, Aurora has IoT, nulls are real. **44k work orders, 54 % breach.** Honesty scores points. |
-| 5 | Hero use case | 0:50 | This is the money slide. "Every work order gets a breach probability **at creation**. We re-rank the queue. The 97 %-risk outdoor job rises; the 20 %-risk repair waits — **the opposite of what the calendar says**." |
-| 6 | Results | 0:45 | "Time-based split, **no leakage**. AUC 0.70 beats the priority rule. Act on the riskiest 10 % → **87 % precision, 768 breaches caught**." Stress it's a *future* hold-out, not in-sample. |
-| 7 | Reliability Index | 0:35 | "One number, every site, comparable. 90 = top-decile risk day anywhere. Cross the band → pull work forward; calm → relax cadence. **Over- and under-maintenance, both solved.**" |
-| 8 | Customer value | 0:40 | Tell Sari's story as a person. Before: finds out after. After: queue sorted, explainable. **Hours → reliability.** |
-| 9 | Feasible & scalable | 0:30 | "Trains in seconds. New customer = one export + one row, **no new model**. Two commands to run. Then API, write-back, alerting." |
-| 10 | Thank you | 0:15 | "Predict breaches, measure reliability, rank the work. Happy to demo live." |
+> **Before you walk on stage:** run `make app` once and leave it open. Have the browser zoomed so
+> text is readable from the back. The **🎤 Story** tab is your title + problem + solution slide.
+
+## 5-minute run sheet (tab by tab)
+
+| ~Time | Tab | What to say / show |
+|------:|-----|--------------------|
+| 0:45 | **🎤 Story** | Read the arc: maintenance runs on the *calendar*, the real cost is *recurring small SLA breaches*, data is *fragmented*. "We add a thin predictive layer on Luotea's unified pipeline: **predict → measure → decide**." Point at the three headline metrics on the right. |
+| 1:15 | **🧑‍💼 Manager** | "Here's what a facility manager sees." Portfolio reliability per site (one 0–100 scale), crew workload, and the **risk-ranked queue with each job already attributed to a worker**. Stress: the engine doesn't just rank — it *assigns*. |
+| 1:00 | **🧰 My tasks** | Switch the dropdown to **Ville (Grounds)** — he has the high-risk jobs. "This is the maintainer's phone view: only my work, riskiest first, with a plain reason. No jargon." Mention it's **mobile-responsive** — field staff use handsets. |
+| 0:45 | **📈 Reliability** | "One 0–100 index, every site. For ERP sites it's the model's *absolute* breach probability — Valmet genuinely runs ~50% breach, the IoT sites sit much lower. It *persists* — a bad week stays elevated, it doesn't snap back." |
+| 0:45 | **🤖 Model card** | The honesty slide. Baseline-vs-model table (AUC 0.704 vs 0.640 rule), **time-based split, no leakage**, calibration curve. "Acting on the riskiest 10% catches 768 breaches at 87% precision." |
+| 0:30 | **🧩 Unified data** | "Same schema spans Valmet ERP and NovaProp IoT — partial coverage shown honestly. New customer = one export, **not** a new model." Close on the roadmap line. |
+
+Total ≈ 5:00. If you only get 3 minutes: **Story → Manager → Model card.**
 
 ## Likely jury questions & answers
-- **"Is AUC 0.70 good enough?"** — It's a genuinely noisy operational target on real data, on a
-  *future* hold-out. The value is the **ranking**: 87 % precision at the top-10 % is what a
-  capacity-limited team actually uses. Baselines and calibration are in the model card.
-- **"Is the SLA-window feature a leak?"** — No. The deadline is set at creation; the breach is
-  decided later by the actual finish. We assert post-completion fields out of the feature set, and
-  the test suite enforces it. The finding (no-deadline jobs breach 23 %, long-window jobs 81 %) is
-  an operational insight.
-- **"Why does this need Luotea specifically?"** — The cross-source, cross-customer unification.
-  One model + one index spanning Valmet ERP and NovaProp IoT is something a single-source team
-  can't show. Onboarding scales without new models.
-- **"Live demo?"** — `make app`, tab 2 (dispatch) is the highlight; tab 3 is the honest model card.
+- **"Is AUC 0.70 good enough?"** — Noisy operational target on a *future* hold-out. The value is the
+  **ranking**: 87% precision on the riskiest 10% is what a capacity-limited team actually uses.
+- **"Why does the index sit near 50 for Valmet?"** — Because that site genuinely breaches ~50% of its
+  work — it's an *absolute* probability, not an artifact. Calmer IoT sites sit at ~15–23. It also
+  *persists* (7-day smoothed), so a bad stretch stays elevated.
+- **"Is the SLA-window feature a leak?"** — No. The deadline is set at creation; the breach is decided
+  later by the actual finish. Post-completion fields are asserted out (enforced by tests).
+- **"Why Luotea specifically?"** — Cross-source, cross-customer unification: one model + one index
+  across ERP and IoT. Onboarding scales without new models.
 
-## Live demo script (if asked, ~60s)
-1. `make app` → **Reliability Index** tab: pick Valmet L11 + Aurora, show the same scale.
-2. **Dispatch** tab: scroll the colour-ranked queue — "do the red ones first".
-3. **Model card** tab: point at the baseline-vs-model table and the calibration curve.
+## Fallback if the laptop/projector won't run Streamlit
+The pre-rendered figures in `outputs/figures/` (`reliability_index_cross_site.png`,
+`sla_roc_pr.png`, `sla_dispatch_precision_at_k.png`, `dispatch_list_site_valmet_l11.png`,
+`sla_calibration.png`, `sla_feature_importance.png`) and `outputs/operations_briefing.md` tell the
+same story as static images — open them directly and narrate the run sheet above.

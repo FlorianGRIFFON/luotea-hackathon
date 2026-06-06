@@ -79,8 +79,9 @@ for. #2/#3/#4 are not dropped — they become *supporting layers* of the one her
 - [x] `outputs/operations_briefing.md` + `.json` — plain-language morning briefing artifact
 
 ## Phase 4 — Presentation (gated on Phase 2–3 complete + tests green + demo runs)
-- [x] `presentation/slides.md` (Marp, 10 slides) + `SPEAKER_NOTES.md` — **all gates passed**
-  - [x] Phase 2 items done · REAL_WORLD.md exists · `make demo` runs end-to-end · 12 tests green · demoable ≤5 min
+- [x] **App-as-presentation** — the Streamlit app *is* the deck (added a 🎤 Story/pitch tab); Marp deck + HTML retired
+- [x] `presentation/SPEAKER_NOTES.md` — app-driven 5-min run sheet (tab-by-tab) + Q&A + fallback
+  - [x] Phase 2 items done · REAL_WORLD.md exists · `make demo` runs end-to-end · 16 tests green · demoable ≤5 min
 
 ## Final
 - [x] `OVERNIGHT_SUMMARY.md`

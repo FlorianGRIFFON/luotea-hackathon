@@ -78,7 +78,6 @@ def calendar_tab() -> None:
         cols[i % len(cols)].metric(
             f"{em} {fmt_site(row['site_id'])}",
             f"{row['rri']:.0f}",
-            row["band"],
         )
 
     st.divider()

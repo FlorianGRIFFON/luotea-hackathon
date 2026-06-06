@@ -80,7 +80,7 @@ claude-shenanigans/
     ARCHITECTURE.md        how this layer sits on the pipeline + the ML contract
     REAL_WORLD.md          customer persona, before/after, rollout, production
     SCALING.md             minimal-command flow + roadmap + forward TODO
-  presentation/            slides (built only after Phase 2–3 complete)
+  presentation/            SPEAKER_NOTES.md — the app IS the deck (🎤 Story tab); pitch run sheet
 ```
 
 ---

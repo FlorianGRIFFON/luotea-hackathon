@@ -4,13 +4,13 @@ Luotea Reliability Risk Engine — interactive demo (mobile-responsive).
     streamlit run src/demo/app.py
 
 Reads only precomputed artifacts under outputs/ (build them first with
-`python -m src.demo.build_demo_artifacts`). Two operations-facing roles up front, then the
-analytics behind them:
-  🧑‍💼 Manager    — global picture: portfolio reliability, crew load, the risk-ranked queue
+`python -m src.demo.build_demo_artifacts`). Pitch tab up front, then operations-facing roles,
+then the analytics behind them:
+  🎤 Story        — the pitch: problem → solution → headline metrics
+  🧑‍💼 Manager    — global picture: portfolio reliability, crew load, queue, RRI history
   🧰 My tasks     — a maintainer's own list, attributed by predicted risk, with a plain reason
-  📈 Reliability  — the single 0–100 metric per site
-  🤖 Model card   — held-out performance vs baselines (the honesty)
-  🧩 Unified data — one schema across ERP + IoT customers
+  🧹 Cleaning     — utilization-driven room cleaning priority (Valmet L11)
+  🧩 Data & model — unified schema across customers, then held-out evaluation
 """
 from __future__ import annotations
 
@@ -99,9 +99,9 @@ def reason_for(work_type: str, risk: float) -> str:
 
 
 # ----------------------------------------------------------------------------- header
-st.title("🌿 Luotea Reliability Risk Engine")
+st.title("Luotea Reliability Risk Engine")
 st.caption("From calendar-based maintenance to **data-driven reliability** · "
-           "**data → signals → decisions** · built on the Luotea pipeline (Gold).")
+           "**data → signals → decisions**")
 
 sla = load_json(OUT / "metrics" / "sla_risk_metrics.json")
 summary = load_json(OUT / "metrics" / "demo_summary.json")
@@ -113,37 +113,71 @@ m[1].metric("Work orders scored", f"{h['n_work_orders_scored']:,}")
 m[2].metric("Top-10% precision", f"{h['dispatch_top10pct_precision']*100:.0f}%", f"base {h['test_base_rate']*100:.0f}%")
 m[3].metric("Breaches caught (top-10%)", f"{h['dispatch_top10pct_breaches_caught']:,}")
 
-tabs = st.tabs(["🧑‍💼 Manager", "🧰 My tasks", "📈 Reliability", "🧹 Cleaning", "🤖 Model card", "🧩 Unified data"])
+tabs = st.tabs(["Story", "Manager", "My tasks", "Cleaning", "Data & model"])
 
-# ============================================================================= 1. MANAGER
+# ============================================================================= 1. STORY (pitch)
 with tabs[0]:
-    st.subheader("Manager — what's happening across the portfolio, right now")
+    st.markdown("### The pitch — *from calendar-based maintenance to data-driven reliability*")
+    s1, s2 = st.columns([3, 2])
+    with s1:
+        st.markdown(
+            "#### The problem\n"
+            "Building maintenance still runs on the **calendar**, not on risk. Work happens because "
+            "it's *scheduled* — and the real cost isn't one big failure, it's the **recurring small "
+            "SLA breaches** that pile up unseen until a tenant complains. The data exists (work "
+            "orders, alarms, energy, IoT) but it's **fragmented** and only ever *reports the past*.\n\n"
+            "#### Our answer — a thin predictive layer on a unified backbone\n"
+            "The Luotea pipeline already unified **6 fragmented sources** into one QA-passed model. "
+            "On top of it we add, **read-only**:\n"
+            "1. **Predict** — every work order's probability of breaching SLA, *at creation time*.\n"
+            "2. **Measure** — roll it into one **Reliability Risk Index (0–100)** that works for any site.\n"
+            "3. **Decide** — a **risk-ranked queue**, with each job *attributed to the right worker*.\n\n"
+            "Calendar → risk. Reporting → prediction. Hours → **operational reliability**."
+        )
+    with s2:
+        st.info("**data → signals → decisions**")
+        st.metric("Model ROC-AUC", f"{h['model_roc_auc']:.3f}", f"+{h['model_roc_auc']-h['priority_rule_roc_auc']:.3f} vs priority-rule")
+        st.metric("Breaches caught in riskiest 10%", f"{h['dispatch_top10pct_breaches_caught']:,}",
+                  f"{h['dispatch_top10pct_precision']*100:.0f}% precision")
+        st.metric("Real work orders scored", f"{h['n_work_orders_scored']:,}")
+        st.caption("All numbers from a leakage-free, time-based hold-out — not in-sample.")
+    st.divider()
+    st.markdown(
+        "**Why Luotea (and why this scales):** the same Gold schema + `site_id` key already span "
+        "**Valmet ERP** and **NovaProp IoT** — onboarding a new customer is one data export, **not** a "
+        "new model. Trains in seconds; runs on a laptop or a phone.\n\n"
+        "**Walk the demo →** *Manager* (the global queue + reliability index) · *My tasks* (a maintainer's phone view) · "
+        "*Cleaning* (utilization-driven room priority) · "
+        "*Data & model* (one schema, honest evaluation)."
+    )
+    st.image(str(FIG / "reliability_index_cross_site.png"),
+             caption="One 0–100 reliability scale across a Valmet ERP site and a NovaProp IoT site")
+
+# ============================================================================= 2. MANAGER
+with tabs[1]:
 
     port = load_parquet(PRED / "portfolio_today.parquet")
-    st.markdown("**Site reliability today** — one 0–100 scale, every site (higher = more risk):")
+    st.subheader("Site reliability today")
     cols = st.columns(min(len(port), 4))
     for i, r in port.iterrows():
         c = cols[i % len(cols)]
         c.metric(f"{BAND_EMOJI.get(r['band'],'')} {fmt_site(r['site_id'])}",
-                 f"{r['rri']:.0f}", r["band"])
+                 f"{r['rri']:.0f}")
 
     st.divider()
-    left, right = st.columns([1, 1])
+    left, right = st.columns([1, 1], vertical_alignment="center")
     with left:
-        st.markdown("**Crew workload** — who is carrying the high-risk work:")
+        st.subheader("Crew workload")
         wl = load_parquet(PRED / "crew_workload.parquet").rename(columns={
             "assigned_to": "Worker", "role": "Role", "tasks": "Tasks",
             "high_risk": "High-risk", "top_risk_pct": "Top risk %"})
         st.dataframe(wl, hide_index=True, width="stretch")
     with right:
         crew = summary.get("crew", {})
-        st.markdown("**Today's backlog at Valmet L11**")
         cc = st.columns(3)
         cc[0].metric("Tasks", crew.get("tasks_assigned", "—"))
         cc[1].metric("High-risk", crew.get("high_risk_tasks", "—"))
         cc[2].metric("Crew", crew.get("workers", "—"))
-        st.caption("Predictive maintenance ranks the backlog by SLA-breach risk, then attributes "
-                   "each job to the right crew member — the riskiest work is spread first.")
 
     st.markdown("**Risk-ranked queue (attributed)** — the global to-do list, worst first:")
     q = load_parquet(PRED / "task_assignments.parquet")[
@@ -153,11 +187,35 @@ with tabs[0]:
                       "assigned_to": "Assigned to"})
     st.dataframe(q.style.map(lambda v: BAND_BG.get(v, ""), subset=["Risk"]),
                  hide_index=True, height=380, width="stretch")
-    st.image(str(FIG / "reliability_index_cross_site.png"),
-             caption="Same 0–100 scale across a Valmet ERP site and a NovaProp IoT site")
 
-# ============================================================================= 2. MY TASKS
-with tabs[1]:
+    st.divider()
+    st.markdown(
+        "### Reliability over time\n\n"
+        "One score per site, 0–100.<br>"
+        "Same scale for every customer; pick sites below to compare.",
+        unsafe_allow_html=True,
+    )
+    rri = load_parquet(PRED / "reliability_index.parquet").dropna(subset=["reliability_risk_index"])
+    sites = sorted(rri["site_id"].unique())
+    default = [s for s in ["site_valmet_l11", "site_aurora"] if s in sites] or sites[:2]
+    chosen = st.multiselect("Sites", sites, default=default, format_func=fmt_site)
+    if chosen:
+        d = rri[rri["site_id"].isin(chosen)].copy()
+        d["signal_date"] = pd.to_datetime(d["signal_date"])
+        d = d[d["signal_date"] >= d["signal_date"].max() - pd.Timedelta(days=730)]
+        d["site"] = d["site_id"].map(fmt_site)
+        line = alt.Chart(d).mark_line(opacity=0.85).encode(
+            x=alt.X("signal_date:T", title="Date"),
+            y=alt.Y("reliability_risk_index:Q", title="Reliability Risk Index", scale=alt.Scale(domain=[0, 100])),
+            color=alt.Color("site:N", title="Site"),
+            tooltip=["site", "signal_date:T", alt.Tooltip("reliability_risk_index:Q", format=".0f")],
+        )
+        band = alt.Chart(pd.DataFrame({"y": [70]})).mark_rule(strokeDash=[6, 4], color="orange").encode(y="y")
+        st.altair_chart((line + band).properties(height=360), width="stretch")
+        st.caption("Orange line = elevated-risk threshold.")
+
+# ============================================================================= 3. MY TASKS
+with tabs[2]:
     st.subheader("My tasks — your work for today, riskiest first")
     asn = load_parquet(PRED / "task_assignments.parquet")
     workers = sorted(asn["assigned_to"].unique())
@@ -180,35 +238,6 @@ with tabs[1]:
         "wo_no": "WO #", "work_type_eng": "Task", "breach_risk_pct": "Breach risk %", "risk_band": "Risk"})
     st.dataframe(view.style.map(lambda v: BAND_BG.get(v, ""), subset=["Risk"]),
                  hide_index=True, height=420, width="stretch")
-
-# ============================================================================= 3. RELIABILITY
-with tabs[2]:
-    st.subheader("Reliability Risk Index — one 0–100 scale, every site")
-    st.markdown(
-        "**0 = calm, 100 = high disruption risk** (7-day smoothed). For ERP sites it tracks the "
-        "model's *absolute* mean SLA-breach probability, so a site that genuinely breaches ~50 % of "
-        "its work sits near 50 — while calmer IoT sites (energy + incidents) sit lower. The level is "
-        "real and persists; it doesn't snap back to the middle. Different customers, one scale."
-    )
-    rri = load_parquet(PRED / "reliability_index.parquet").dropna(subset=["reliability_risk_index"])
-    sites = sorted(rri["site_id"].unique())
-    default = [s for s in ["site_valmet_l11", "site_aurora"] if s in sites] or sites[:2]
-    chosen = st.multiselect("Sites", sites, default=default, format_func=fmt_site)
-    if chosen:
-        d = rri[rri["site_id"].isin(chosen)].copy()
-        d["signal_date"] = pd.to_datetime(d["signal_date"])
-        d = d[d["signal_date"] >= d["signal_date"].max() - pd.Timedelta(days=730)]
-        d["site"] = d["site_id"].map(fmt_site)
-        line = alt.Chart(d).mark_line(opacity=0.85).encode(
-            x=alt.X("signal_date:T", title="Date"),
-            y=alt.Y("reliability_risk_index:Q", title="Reliability Risk Index", scale=alt.Scale(domain=[0, 100])),
-            color=alt.Color("site:N", title="Site"),
-            tooltip=["site", "signal_date:T", alt.Tooltip("reliability_risk_index:Q", format=".0f")],
-        )
-        band = alt.Chart(pd.DataFrame({"y": [70]})).mark_rule(strokeDash=[6, 4], color="orange").encode(y="y")
-        st.altair_chart((line + band).properties(height=360), width="stretch")
-        st.caption("Dashed line = elevated-risk band. Days above it are where a dynamic maintenance "
-                   "calendar pulls work forward.")
 
 # ============================================================================= 4. CLEANING
 with tabs[3]:
@@ -269,8 +298,25 @@ with tabs[3]:
         st.caption("K-Means clustering on mean utilization, std dev, zero-day fraction, and high-day fraction. "
                    "Retrain quarterly or when new rooms are added.")
 
-# ============================================================================= 5. MODEL CARD
+# ============================================================================= 5. DATA & MODEL
 with tabs[4]:
+    st.subheader("One canonical model spans very different customers")
+    st.markdown(
+        "Luotea's value is **unifying fragmented facility data**. The same Gold schema and `site_id` "
+        "key carry **Valmet ERP** (alarms, work orders, SLA) and **NovaProp IoT** (Smartti energy, "
+        "KONE, incidents) — with honest nulls where a source is absent. Onboarding a new customer is "
+        "a new Bronze export, **not** a new model."
+    )
+    cov = pd.DataFrame({
+        "Site": ["Valmet L11", "Valmet Venttiilitehdas", "Aurora (NovaProp)", "Horizon (NovaProp)"],
+        "Work orders / SLA": ["✅", "✅", "—", "—"],
+        "Alarms": ["✅ (2025+)", "✅", "—", "—"],
+        "Energy (Smartti)": ["—", "—", "✅", "✅"],
+        "Incidents / KONE": ["—", "—", "✅", "✅"],
+    })
+    st.table(cov)
+
+    st.divider()
     st.subheader("Model card — honest, held-out evaluation")
     ds = sla["dataset"]
     st.markdown(
@@ -297,25 +343,3 @@ with tabs[4]:
     g[0].image(str(FIG / "sla_roc_pr.png"), caption="ROC & Precision–Recall vs baselines")
     g[1].image(str(FIG / "sla_calibration.png"), caption="Calibration — predicted ≈ observed")
     st.image(str(FIG / "sla_feature_importance.png"), caption="Permutation importance (held-out test)")
-
-# ============================================================================= 6. UNIFIED
-with tabs[5]:
-    st.subheader("One canonical model spans very different customers")
-    st.markdown(
-        "Luotea's value is **unifying fragmented facility data**. The same Gold schema and `site_id` "
-        "key carry **Valmet ERP** (alarms, work orders, SLA) and **NovaProp IoT** (Smartti energy, "
-        "KONE, incidents) — with honest nulls where a source is absent. Onboarding a new customer is "
-        "a new Bronze export, **not** a new model."
-    )
-    cov = pd.DataFrame({
-        "Site": ["Valmet L11", "Valmet Venttiilitehdas", "Aurora (NovaProp)", "Horizon (NovaProp)"],
-        "Work orders / SLA": ["✅", "✅", "—", "—"],
-        "Alarms": ["✅ (2025+)", "✅", "—", "—"],
-        "Energy (Smartti)": ["—", "—", "✅", "✅"],
-        "Incidents / KONE": ["—", "—", "✅", "✅"],
-    })
-    st.table(cov)
-
-st.divider()
-st.caption("Read-only on `luotea-pipeline` Gold/Silver · QA gate PASS (0 errors) · "
-           "see docs/REAL_WORLD.md, docs/ARCHITECTURE.md, docs/SCALING.md.")
