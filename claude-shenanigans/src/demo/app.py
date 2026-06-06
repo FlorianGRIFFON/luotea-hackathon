@@ -90,6 +90,11 @@ def _score_date(target_date: pd.Timestamp) -> tuple[pd.DataFrame, pd.Timestamp]:
     return score_for_date(_util_df(), target_date, _clusters())
 
 
+def gap(height: int = 14):
+    """Vertical breathing room between blocks (Streamlit's default spacing is tight)."""
+    st.markdown(f"<div style='height: {height}px'></div>", unsafe_allow_html=True)
+
+
 def reason_for(work_type: str, risk: float) -> str:
     if risk >= 80:
         return "Long/complex job that has historically slipped — start now."
@@ -117,41 +122,126 @@ tabs = st.tabs(["Story", "Manager", "My tasks", "Cleaning", "Data & model"])
 
 # ============================================================================= 1. STORY (pitch)
 with tabs[0]:
-    st.markdown("### The pitch — *from calendar-based maintenance to data-driven reliability*")
-    s1, s2 = st.columns([3, 2])
-    with s1:
-        st.markdown(
-            "#### The problem\n"
-            "Building maintenance still runs on the **calendar**, not on risk. Work happens because "
-            "it's *scheduled* — and the real cost isn't one big failure, it's the **recurring small "
-            "SLA breaches** that pile up unseen until a tenant complains. The data exists (work "
-            "orders, alarms, energy, IoT) but it's **fragmented** and only ever *reports the past*.\n\n"
-            "#### Our answer — a thin predictive layer on a unified backbone\n"
-            "The Luotea pipeline already unified **6 fragmented sources** into one QA-passed model. "
-            "On top of it we add, **read-only**:\n"
-            "1. **Predict** — every work order's probability of breaching SLA, *at creation time*.\n"
-            "2. **Measure** — roll it into one **Reliability Risk Index (0–100)** that works for any site.\n"
-            "3. **Decide** — a **risk-ranked queue**, with each job *attributed to the right worker*.\n\n"
-            "Calendar → risk. Reporting → prediction. Hours → **operational reliability**."
-        )
-    with s2:
-        st.info("**data → signals → decisions**")
-        st.metric("Model ROC-AUC", f"{h['model_roc_auc']:.3f}", f"+{h['model_roc_auc']-h['priority_rule_roc_auc']:.3f} vs priority-rule")
-        st.metric("Breaches caught in riskiest 10%", f"{h['dispatch_top10pct_breaches_caught']:,}",
-                  f"{h['dispatch_top10pct_precision']*100:.0f}% precision")
-        st.metric("Real work orders scored", f"{h['n_work_orders_scored']:,}")
-        st.caption("All numbers from a leakage-free, time-based hold-out — not in-sample.")
-    st.divider()
+    # ---------- 1. The problem: four worlds that don't join ----------
+    st.markdown("### The problem: four worlds that were never built to be joined")
     st.markdown(
-        "**Why Luotea (and why this scales):** the same Gold schema + `site_id` key already span "
-        "**Valmet ERP** and **NovaProp IoT** — onboarding a new customer is one data export, **not** a "
-        "new model. Trains in seconds; runs on a laptop or a phone.\n\n"
-        "**Walk the demo →** *Manager* (the global queue + reliability index) · *My tasks* (a maintainer's phone view) · "
-        "*Cleaning* (utilization-driven room priority) · "
-        "*Data & model* (one schema, honest evaluation)."
+        "Luotea's facility data comes from **four different worlds that were never designed to be "
+        "joined**. Each one has its own format, its own grain, and its own idea of an *identity*:"
     )
+    st.markdown(
+        "| World | Format | Identity |\n"
+        "|---|---|---|\n"
+        "| **ERP** (alarms, work orders, maintenance) | CSV (cp1252, `;`-delimited) | `CUSTOMER_NO`, `CUSTOMER_SITE_NO` |\n"
+        "| **Smartti IoT** (energy, CO₂, temperature) | nested JSON | `property.id`, `node.id` |\n"
+        "| **KONE** (elevator occupancy) | JSON arrays | building name |\n"
+        "| **Cleaning** (room / desk utilization) | wide CSV | asset names (`K2`, `Letto`, ...) |"
+    )
+    gap()
+    st.markdown(
+        "On top of that, the raw files are messy: odd text encodings, literal `\"NULL\"` strings, "
+        "Finnish dates, free text, mixed time zones."
+    )
+
+    st.divider()
+    # ---------- 2. What we built FIRST: the unified pipeline ----------
+    st.markdown("### What we built first: one canonical model")
+    st.markdown(
+        "Before any machine learning, we built a **medallion pipeline** (Bronze, Silver, Gold) that "
+        "ingests all six source families, cleans them, and **joins every world onto one canonical "
+        "`site_id`**, behind an automated QA gate (row counts, key uniqueness, PII scan)."
+    )
+    gap()
+    st.graphviz_chart(
+        r"""
+        digraph {
+          rankdir=LR; bgcolor="transparent";
+          node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=11, color="#d0d0d0"];
+          edge [color="#9e9e9e"];
+          subgraph cluster_src {
+            label="Four worlds · four ID systems"; fontname="Helvetica"; fontsize=11;
+            style=dashed; color="#bdbdbd";
+            erp     [label="ERP\nalarms · work orders\nCUSTOMER_NO", fillcolor="#E3F2FD"];
+            smartti [label="Smartti IoT\nenergy · CO₂\nproperty.id", fillcolor="#E8F5E9"];
+            kone    [label="KONE\nelevator occupancy\nbuilding name", fillcolor="#FFF3E0"];
+            clean   [label="Cleaning\nroom / desk use\nasset names", fillcolor="#F3E5F5"];
+          }
+          pipe [label="Medallion pipeline\nBronze → Silver → Gold\n+ QA gate", shape=box3d, fillcolor="#ECEFF1"];
+          gold [label="site_daily_signals\none row per site_id × day", fillcolor="#1565C0", fontcolor="white"];
+          erp -> pipe; smartti -> pipe; kone -> pipe; clean -> pipe; pipe -> gold;
+        }
+        """
+    )
+    gap()
+    st.markdown("**The result: one Parquet table, `site_daily_signals`, joined on `site_id`:**")
+    st.dataframe(load_parquet(PRED / "unified_sample.parquet"), hide_index=True, width="stretch")
+
+    st.divider()
+    # ---------- 3 + 4. What this unified data lets us build → SLA use case ----------
+    st.markdown("### What this unified data lets us build")
+    st.markdown(
+        "Once every source shares **one `site_id` and one daily grain**, we can ask *forward-looking* "
+        "questions instead of only reporting the past. Our hackathon use case:"
+    )
+    gap(6)
+    with st.container(border=True):
+        st.markdown("#### Predicting SLA breaches before they happen")
+        st.markdown(
+            "At the moment a work order is **created**, we predict its probability of **breaching its "
+            "SLA**. It is a machine-learning model trained on "
+            f"**{sla['dataset']['n_total']:,} real work orders** and evaluated on a **future hold-out** "
+            f"({sla['dataset']['test_period_start'][:10]} to {sla['dataset']['test_period_end'][:10]}) "
+            "with **no leakage**, so the score is a genuine forecast, not hindsight."
+        )
+        gap(6)
+        u = st.columns(3)
+        u[0].metric("Breach-risk model ROC-AUC", f"{h['model_roc_auc']:.3f}",
+                    f"+{h['model_roc_auc']-h['priority_rule_roc_auc']:.3f} vs priority-rule")
+        u[1].metric("Riskiest-10% precision", f"{h['dispatch_top10pct_precision']*100:.0f}%",
+                    f"{h['dispatch_top10pct_breaches_caught']:,} breaches caught early")
+        u[2].metric("Work orders scored", f"{h['n_work_orders_scored']:,}")
+
+    st.divider()
+    # ---------- 5. Reliability Risk Index ----------
+    st.markdown("### One number per site: the Reliability Risk Index")
+    st.markdown(
+        "We roll the breach prediction and the live signals (alarms, energy, incidents) into a single "
+        "0 to 100 score per site, so a manager watches one number instead of hundreds."
+    )
+    gap()
     st.image(str(FIG / "reliability_index_cross_site.png"),
-             caption="One 0–100 reliability scale across a Valmet ERP site and a NovaProp IoT site")
+             caption="One 0 to 100 scale: a Valmet ERP site (work-order and SLA risk) and a NovaProp "
+                     "IoT site (energy and incident risk). The level is real and persists; it does not "
+                     "snap back to 50.")
+
+    st.divider()
+    # ---------- 6. What actions can people take? ----------
+    st.markdown("### What actions can people take thanks to this?")
+    gap(6)
+    a1, a2 = st.columns(2)
+    a1.markdown(
+        "**Managers** *(Manager tab)*\n\n"
+        "See the whole portfolio's reliability at a glance, plus a **risk-ranked queue with every job "
+        "attributed to the right crew member**. Dispatch by risk, not by calendar."
+    )
+    a2.markdown(
+        "**Maintainers** *(My tasks tab)*\n\n"
+        "A personal, risk-ordered task list with a plain reason. **Act on the prediction, before the "
+        "fault**, instead of reacting after a complaint."
+    )
+
+    st.divider()
+    # ---------- 7. How does it scale? ----------
+    st.markdown("### How does it scale?")
+    st.markdown(
+        "- **API-ready**: the trained model is a saved artifact. Wrap it in a scoring endpoint and run "
+        "it nightly, right after the pipeline's QA gate passes.\n"
+        "- **New customer = one data export plus one `site_id` mapping row, with no new model** "
+        "(`site_id` is already a feature, so the model generalises across sites).\n"
+        "- **New data source = one Silver table**, and the Reliability Index picks it up automatically, "
+        "re-weighting over whatever signals a site has.\n"
+        "- Trains in **seconds** and runs on a laptop or a phone. The same 0 to 100 index gives "
+        "**cross-customer benchmarking** for free as more sites are onboarded.\n\n\n"
+    )
 
 # ============================================================================= 2. MANAGER
 with tabs[1]:
@@ -304,8 +394,9 @@ with tabs[4]:
     st.markdown(
         "Luotea's value is **unifying fragmented facility data**. The same Gold schema and `site_id` "
         "key carry **Valmet ERP** (alarms, work orders, SLA) and **NovaProp IoT** (Smartti energy, "
-        "KONE, incidents) — with honest nulls where a source is absent. Onboarding a new customer is "
-        "a new Bronze export, **not** a new model."
+        "KONE, incidents) with honest nulls where a source is absent.<br>"
+        "Onboarding a new customer is a new Bronze export, **not** a new model.",
+        unsafe_allow_html=True,
     )
     cov = pd.DataFrame({
         "Site": ["Valmet L11", "Valmet Venttiilitehdas", "Aurora (NovaProp)", "Horizon (NovaProp)"],
@@ -317,11 +408,11 @@ with tabs[4]:
     st.table(cov)
 
     st.divider()
-    st.subheader("Model card — honest, held-out evaluation")
+    st.subheader("Model evaluation")
     ds = sla["dataset"]
     st.markdown(
         f"- **Target:** `is_sla_violation` on **{ds['n_total']:,}** Valmet work orders (2017→2026).\n"
-        f"- **Split:** time-based — train on the past, test on **{ds['test_period_start'][:10]} → "
+        f"- **Split:** time-based, train on the past, test on **{ds['test_period_start'][:10]} → "
         f"{ds['test_period_end'][:10]}** ({ds['n_test']:,} work orders). No shuffling, no leakage.\n"
         f"- **Features:** {ds['n_features']} creation-time attributes only. Post-completion fields excluded by assertion."
     )
@@ -339,7 +430,22 @@ with tabs[4]:
         {"Model": "★ HistGradientBoosting", **pick(md)},
     ])
     st.dataframe(comp, hide_index=True, width="stretch")
-    g = st.columns(2)
-    g[0].image(str(FIG / "sla_roc_pr.png"), caption="ROC & Precision–Recall vs baselines")
-    g[1].image(str(FIG / "sla_calibration.png"), caption="Calibration — predicted ≈ observed")
-    st.image(str(FIG / "sla_feature_importance.png"), caption="Permutation importance (held-out test)")
+
+    st.image(
+        str(FIG / "sla_roc_pr.png"),
+        caption="ROC & Precision-Recall vs baselines",
+        use_container_width=True,
+    )
+    cal_col, imp_col = st.columns(2)
+    with cal_col:
+        st.image(
+            str(FIG / "sla_calibration.png"),
+            caption="Calibration: predicted ≈ observed",
+            use_container_width=True,
+        )
+    with imp_col:
+        st.image(
+            str(FIG / "sla_feature_importance.png"),
+            caption="Permutation importance (held-out test)",
+            use_container_width=True,
+        )

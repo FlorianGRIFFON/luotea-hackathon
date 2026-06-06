@@ -50,12 +50,13 @@ def build_reliability_index(model) -> pl.DataFrame:
     return rri
 
 
-def build_dispatch_sample(site_id: str = SITE_VALMET_L11, window: int = 40) -> pl.DataFrame:
+def build_dispatch_sample(site_id: str = SITE_VALMET_L11, window: int = 120) -> pl.DataFrame:
     """
     A realistic 'current open backlog' view: take the most recent `window` work orders in the
-    held-out test period at this site and rank them by predicted breach risk. This is exactly
-    the queue a facility manager faces — the model re-orders it so the riskiest jobs rise to
-    the top instead of being worked in calendar/arrival order.
+    held-out test period at this site (~2 weeks of jobs) and rank them by predicted breach risk.
+    This is exactly the queue a facility manager faces — the model re-orders it so the riskiest
+    jobs rise to the top instead of being worked in calendar/arrival order. The window is sized
+    so every crew role carries a believable workload, not one stray task.
     """
     preds = pl.read_parquet(PREDICTIONS_DIR / "sla_risk_test_predictions.parquet").filter(
         pl.col("site_id") == site_id
@@ -307,6 +308,38 @@ def build_cleaning_priority() -> pd.DataFrame:
     return scored
 
 
+def build_unified_sample() -> pl.DataFrame:
+    """
+    One representative row of Gold `site_daily_signals` per site for the Story tab: same schema,
+    same `site_id` key, but each site shows whatever signals it has — Valmet sites carry ERP
+    (energy null), NovaProp sites carry IoT energy (ERP null/zero). The visual proof of
+    'four worlds, every site, joined into one — honest nulls'.
+    """
+    daily = load_daily_signals()
+    # Show the full Gold schema (minus the constant build-date metadata column) so the preview
+    # reads like the real table and scrolls horizontally.
+    cols = [c for c in daily.columns if c != "as_of_date"]
+    # Valmet ERP sites first, then NovaProp IoT sites; any others appended after.
+    order = ["site_valmet_l11", "site_valmet_venttiilitehdas", "site_valmet_toimistotalo",
+             "site_valmet_std", SITE_AURORA, "site_meridian", "site_horizon"]
+    present = [s for s in order if s in daily["site_id"].unique().to_list()]
+    present += [s for s in daily["site_id"].unique().to_list() if s not in present]
+
+    has_signal = (
+        (pl.col("open_work_orders") > 0) | (pl.col("alarm_count") > 0)
+        | pl.col("electricity_kwh").is_not_null() | (pl.col("incident_count") > 0)
+    )
+    rows = []
+    for s in present:
+        sub = daily.filter(pl.col("site_id") == s)
+        signal = sub.filter(has_signal)
+        pick = (signal if signal.height else sub).sort("signal_date", descending=True).head(1)
+        rows.append(pick.select(cols))
+    sample = pl.concat(rows)
+    sample.write_parquet(PREDICTIONS_DIR / "unified_sample.parquet")
+    return sample
+
+
 def run():
     model = ensure_model()
     print("Computing cross-site Reliability Index…")
@@ -320,6 +353,7 @@ def run():
     build_operations_briefing(rri, dispatch)
     print("Scoring cleaning priority (Valmet L11)…")
     build_cleaning_priority()
+    build_unified_sample()
     plot_reliability_cross_site(rri)
     plot_dispatch_table(dispatch, SITE_VALMET_L11)
     summary = build_summary(rri, dispatch)
