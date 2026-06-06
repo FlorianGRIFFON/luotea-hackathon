@@ -22,12 +22,20 @@ import pandas as pd
 import polars as pl
 import streamlit as st
 
+from src.config import SILVER_DIR
 from src.features.cleaning import load_or_train_clusters, load_utilization, score_for_date
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "outputs"
 FIG = OUT / "figures"
 PRED = OUT / "predictions"
+
+_dim_site = pl.read_parquet(
+    SILVER_DIR / "dim_site/dim_site.parquet"
+).select(["site_id", "display_name"])
+SITE_DISPLAY: dict[str, str] = dict(zip(
+    _dim_site["site_id"].to_list(), _dim_site["display_name"].to_list()
+))
 
 st.set_page_config(page_title="Luotea Reliability Risk Engine", page_icon="🌿",
                    layout="wide", initial_sidebar_state="collapsed")
@@ -71,8 +79,13 @@ def fmt_site(s: str) -> str:
 
 BAND_BG = {"ELEVATED": "background-color:#ffcdd2", "NORMAL": "background-color:#fff3cd",
            "CALM": "background-color:#c8e6c9", "HIGH": "background-color:#ffcdd2",
-           "MEDIUM": "background-color:#ffe0b2", "LOW": "background-color:#c8e6c9"}
+           "MEDIUM": "background-color:#ffe0b2", "LOW": "background-color:#c8e6c9",
+           "Critical": "background-color:#ffcdd2"}
 BAND_EMOJI = {"ELEVATED": "⚠️", "NORMAL": "🟡", "CALM": "🟢"}
+ACTION_BG = {"Urgent": "background-color:#ffcdd2", "Monitor": "background-color:#fff3cd",
+             "Low priority": "background-color:#c8e6c9"}
+REC_BG = {"CLEAN": "background-color:#ffcdd2", "MONITOR": "background-color:#fff3cd",
+          "SKIP": "background-color:#c8e6c9"}
 
 
 @st.cache_data
@@ -269,14 +282,17 @@ with tabs[1]:
         cc[1].metric("High-risk", crew.get("high_risk_tasks", "—"))
         cc[2].metric("Crew", crew.get("workers", "—"))
 
-    st.markdown("**Risk-ranked queue (attributed)** — the global to-do list, worst first:")
+    st.markdown("**Risk-ranked queue (attributed)** — ordered by recommended action:")
     q = load_parquet(PRED / "task_assignments.parquet")[
-        ["wo_no", "work_type_eng", "breach_risk_pct", "risk_band", "assigned_to"]
-    ].rename(columns={"wo_no": "WO #", "work_type_eng": "Work type",
-                      "breach_risk_pct": "Breach risk %", "risk_band": "Risk",
-                      "assigned_to": "Assigned to"})
-    st.dataframe(q.style.map(lambda v: BAND_BG.get(v, ""), subset=["Risk"]),
-                 hide_index=True, height=380, width="stretch")
+        ["wo_no", "site_id", "work_type_eng", "assigned_to", "breach_risk_pct", "risk_band", "severity", "action"]
+    ].copy()
+    q["site_id"] = q["site_id"].map(SITE_DISPLAY)
+    q = q.rename(columns={"wo_no": "WO #", "site_id": "Site", "work_type_eng": "Work type",
+                           "assigned_to": "Assigned to", "breach_risk_pct": "Breach risk %",
+                           "risk_band": "Risk", "severity": "Severity", "action": "Action"})
+    st.dataframe(
+        q.style.map(lambda v: ACTION_BG.get(v, ""), subset=["Action"]),
+        hide_index=True, height=380, width="stretch")
 
     st.divider()
     st.markdown(
@@ -306,28 +322,45 @@ with tabs[1]:
 
 # ============================================================================= 3. MY TASKS
 with tabs[2]:
-    st.subheader("My tasks — your work for today, riskiest first")
+    st.subheader("My tasks")
     asn = load_parquet(PRED / "task_assignments.parquet")
     workers = sorted(asn["assigned_to"].unique())
-    # default to a worker who has high-risk work, so the demo lands
-    hi = asn[asn["risk_band"] == "HIGH"]["assigned_to"]
+    hi = asn[asn["action"] == "ACT NOW"]["assigned_to"]
     default_idx = workers.index(hi.iloc[0]) if len(hi) else 0
     who = st.selectbox("I am:", workers, index=default_idx)
 
-    mine = asn[asn["assigned_to"] == who].sort_values("breach_risk_pct", ascending=False)
+    mine = asn[asn["assigned_to"] == who].copy()
     k = st.columns(3)
     k[0].metric("Tasks today", len(mine))
-    k[1].metric("High-risk", int((mine["risk_band"] == "HIGH").sum()))
-    k[2].metric("Top breach risk", f"{mine['breach_risk_pct'].max():.0f}%")
-    st.caption("Your list is ordered by the model's predicted SLA-breach risk — do the top ones "
-               "first to protect the contract. This is the maintainer-facing side of the same engine.")
+    k[1].metric("Urgent", int((mine["action"] == "Urgent").sum()))
+    k[2].metric("Monitor", int((mine["action"] == "Monitor").sum()))
 
-    view = mine.copy()
-    view["Why"] = [reason_for(wt, r) for wt, r in zip(view["work_type_eng"], view["breach_risk_pct"])]
-    view = view[["wo_no", "work_type_eng", "breach_risk_pct", "risk_band", "Why"]].rename(columns={
-        "wo_no": "WO #", "work_type_eng": "Task", "breach_risk_pct": "Breach risk %", "risk_band": "Risk"})
-    st.dataframe(view.style.map(lambda v: BAND_BG.get(v, ""), subset=["Risk"]),
-                 hide_index=True, height=420, width="stretch")
+    mine["site_id"] = mine["site_id"].map(SITE_DISPLAY)
+    view = mine[["wo_no", "site_id", "work_type_eng", "action"]].rename(columns={
+        "wo_no": "WO #", "site_id": "Site", "work_type_eng": "Task", "action": "Action"})
+    st.dataframe(view.style.map(lambda v: ACTION_BG.get(v, ""), subset=["Action"]),
+                 hide_index=True, height=300, width="stretch")
+
+    if "Cleaner" in who:
+        st.divider()
+        st.markdown("**Room cleaning priority for today:**")
+        util = _util_df()
+        latest_date = util["utilization_date"].max()
+        scored, scored_date = _score_date(pd.Timestamp(latest_date))
+        n_clean = int((scored["recommendation"] == "CLEAN").sum())
+        n_monitor = int((scored["recommendation"] == "MONITOR").sum())
+        n_skip = int((scored["recommendation"] == "SKIP").sum())
+        st.caption(f"Scored for: **{scored_date.date()}**")
+        c = st.columns(3)
+        c[0].metric("Clean tonight", n_clean)
+        c[1].metric("Monitor", n_monitor)
+        c[2].metric("Skip", n_skip)
+        clean_view = scored[["room", "recommendation"]].rename(columns={
+            "room": "Room", "recommendation": "Action"})
+        st.dataframe(
+            clean_view.style.map(lambda v: REC_BG.get(v, ""), subset=["Action"]),
+            hide_index=True, height=380, width="stretch"
+        )
 
 # ============================================================================= 4. CLEANING
 with tabs[3]:
@@ -362,7 +395,6 @@ with tabs[3]:
     c[2].metric("🟢 Skip", n_skip, help="No cleaning needed today — save the effort")
     c[3].metric("Effort saved", f"{n_skip/n_total:.0%}", help="Rooms skipped vs cleaning every room on a fixed calendar")
 
-    REC_BG = {"CLEAN": "background-color:#ffcdd2", "MONITOR": "background-color:#fff3cd", "SKIP": "background-color:#c8e6c9"}
     TIER_BG = {"heavy": "background-color:#e3f2fd", "medium": "background-color:#f3e5f5", "light": "background-color:#f1f8e9"}
 
     view = scored.rename(columns={
