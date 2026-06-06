@@ -9,7 +9,6 @@ then the analytics behind them:
   🎤 Story        — the pitch: problem → solution → headline metrics
   🧑‍💼 Manager    — global picture: portfolio reliability, crew load, queue, RRI history
   🧰 My tasks     — a maintainer's own list, attributed by predicted risk, with a plain reason
-  🧹 Cleaning     — utilization-driven room cleaning priority (Valmet L11)
   🧩 Data & model — unified schema across customers, then held-out evaluation
 """
 from __future__ import annotations
@@ -23,7 +22,6 @@ import polars as pl
 import streamlit as st
 
 from src.config import SILVER_DIR
-from src.features.cleaning import load_or_train_clusters, load_utilization, score_for_date
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "outputs"
@@ -88,21 +86,6 @@ REC_BG = {"CLEAN": "background-color:#ffcdd2", "MONITOR": "background-color:#fff
           "SKIP": "background-color:#c8e6c9"}
 
 
-@st.cache_data
-def _util_df() -> pd.DataFrame:
-    return load_utilization()
-
-
-@st.cache_resource
-def _clusters():
-    return load_or_train_clusters(_util_df())
-
-
-@st.cache_data
-def _score_date(target_date: pd.Timestamp) -> tuple[pd.DataFrame, pd.Timestamp]:
-    return score_for_date(_util_df(), target_date, _clusters())
-
-
 def reason_for(work_type: str, risk: float) -> str:
     if risk >= 80:
         return "Long/complex job that has historically slipped — start now."
@@ -126,7 +109,7 @@ m[1].metric("Work orders scored", f"{h['n_work_orders_scored']:,}")
 m[2].metric("Top-10% precision", f"{h['dispatch_top10pct_precision']*100:.0f}%", f"base {h['test_base_rate']*100:.0f}%")
 m[3].metric("Breaches caught (top-10%)", f"{h['dispatch_top10pct_breaches_caught']:,}")
 
-tabs = st.tabs(["Story", "Manager", "My tasks", "Cleaning", "Data & model"])
+tabs = st.tabs(["Story", "Manager", "My tasks", "Data & model"])
 
 # ============================================================================= 1. STORY (pitch)
 with tabs[0]:
@@ -160,7 +143,6 @@ with tabs[0]:
         "**Valmet ERP** and **NovaProp IoT** — onboarding a new customer is one data export, **not** a "
         "new model. Trains in seconds; runs on a laptop or a phone.\n\n"
         "**Walk the demo →** *Manager* (the global queue + reliability index) · *My tasks* (a maintainer's phone view) · "
-        "*Cleaning* (utilization-driven room priority) · "
         "*Data & model* (one schema, honest evaluation)."
     )
     st.image(str(FIG / "reliability_index_cross_site.png"),
@@ -251,87 +233,8 @@ with tabs[2]:
     st.dataframe(view.style.map(lambda v: ACTION_BG.get(v, ""), subset=["Action"]),
                  hide_index=True, height=300, width="stretch")
 
-    if "Cleaner" in who:
-        st.divider()
-        st.markdown("**Room cleaning priority for today:**")
-        util = _util_df()
-        latest_date = util["utilization_date"].max()
-        scored, scored_date = _score_date(pd.Timestamp(latest_date))
-        n_clean = int((scored["recommendation"] == "CLEAN").sum())
-        n_monitor = int((scored["recommendation"] == "MONITOR").sum())
-        n_skip = int((scored["recommendation"] == "SKIP").sum())
-        st.caption(f"Scored for: **{scored_date.date()}**")
-        c = st.columns(3)
-        c[0].metric("Clean tonight", n_clean)
-        c[1].metric("Monitor", n_monitor)
-        c[2].metric("Skip", n_skip)
-        clean_view = scored[["room", "recommendation"]].rename(columns={
-            "room": "Room", "recommendation": "Action"})
-        st.dataframe(
-            clean_view.style.map(lambda v: REC_BG.get(v, ""), subset=["Action"]),
-            hide_index=True, height=380, width="stretch"
-        )
-
-# ============================================================================= 4. CLEANING
+# ============================================================================= 4. DATA & MODEL
 with tabs[3]:
-    st.subheader("Cleaning priority — Valmet Lentokentänkatu 11")
-    st.markdown(
-        "Replaces the fixed cleaning calendar with a **utilization-driven priority list**. "
-        "Every evening, each of the 38 meeting rooms gets an urgency score (0–100) combining "
-        "today's occupancy, the 3-day rolling average, and how many consecutive days the room "
-        "has been in use without a rest day."
-    )
-
-    util = _util_df()
-    date_min = util["utilization_date"].min().date()
-    date_max = util["utilization_date"].max().date()
-
-    picked = st.date_input(
-        "Score for date", value=date_max,
-        min_value=date_min, max_value=date_max,
-        help="Defaults to the latest date in the data. Use any working day to review past recommendations."
-    )
-    scored, scored_date = _score_date(pd.Timestamp(picked))
-
-    n_clean = int((scored["recommendation"] == "CLEAN").sum())
-    n_monitor = int((scored["recommendation"] == "MONITOR").sum())
-    n_skip = int((scored["recommendation"] == "SKIP").sum())
-    n_total = len(scored)
-
-    st.caption(f"Scored for: **{scored_date.date()}**")
-    c = st.columns(4)
-    c[0].metric("🔴 Clean tonight", n_clean, help="Rooms above urgency threshold 65 — must be cleaned")
-    c[1].metric("🟡 Monitor", n_monitor, help="Borderline — clean if capacity allows")
-    c[2].metric("🟢 Skip", n_skip, help="No cleaning needed today — save the effort")
-    c[3].metric("Effort saved", f"{n_skip/n_total:.0%}", help="Rooms skipped vs cleaning every room on a fixed calendar")
-
-    TIER_BG = {"heavy": "background-color:#e3f2fd", "medium": "background-color:#f3e5f5", "light": "background-color:#f1f8e9"}
-
-    view = scored.rename(columns={
-        "room": "Room", "usage_tier": "Tier",
-        "today_pct": "Today %", "rolling_3d_mean": "3d avg %",
-        "accumulation_days": "Accum. days", "urgency_score": "Score",
-        "recommendation": "Action",
-    })
-    st.dataframe(
-        view.style
-            .map(lambda v: REC_BG.get(v, ""), subset=["Action"])
-            .map(lambda v: TIER_BG.get(v, ""), subset=["Tier"]),
-        hide_index=True, height=480, width="stretch",
-    )
-
-    with st.expander("Room usage tiers (trained on Jan 2024–May 2026 history)"):
-        clusters = _clusters()
-        profiles = clusters["profiles"]
-        for tier, emoji in [("heavy", "🔵"), ("medium", "🟣"), ("light", "🟤")]:
-            rooms = sorted(profiles[profiles["usage_tier"] == tier]["asset_name"].tolist())
-            mean_u = profiles[profiles["usage_tier"] == tier]["mean_pct"].mean()
-            st.markdown(f"**{emoji} {tier.upper()}** (avg {mean_u:.0f}% utilization): {', '.join(rooms)}")
-        st.caption("K-Means clustering on mean utilization, std dev, zero-day fraction, and high-day fraction. "
-                   "Retrain quarterly or when new rooms are added.")
-
-# ============================================================================= 5. DATA & MODEL
-with tabs[4]:
     st.subheader("One canonical model spans very different customers")
     st.markdown(
         "Luotea's value is **unifying fragmented facility data**. The same Gold schema and `site_id` "
