@@ -2,8 +2,8 @@
   "headline": {
     "model_roc_auc": 0.704,
     "priority_rule_roc_auc": 0.64,
-    "dispatch_top10pct_precision": 0.868,
-    "dispatch_top10pct_breaches_caught": 768,
+    "dispatch_top10pct_precision": 0.879,
+    "dispatch_top10pct_breaches_caught": 778,
     "test_base_rate": 0.613,
     "n_work_orders_scored": 44265
   },

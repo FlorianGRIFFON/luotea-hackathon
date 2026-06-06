@@ -26,6 +26,7 @@ import polars as pl
 from src.config import FIGURES_DIR, METRICS_DIR, MODELS_DIR, PREDICTIONS_DIR, SITE_AURORA, SITE_VALMET_L11
 from src.data.loader import load_daily_signals, load_work_orders
 from src.features.assignment import assign_tasks, crew_workload
+from src.features.cleaning import load_or_train_clusters, load_utilization, score_for_date
 from src.features.reliability_index import compute_breach_load, compute_reliability_index
 from src.models.sla_risk import SLARiskModel
 
@@ -295,6 +296,17 @@ def build_portfolio_today(rri: pl.DataFrame) -> pl.DataFrame:
     return out
 
 
+def build_cleaning_priority() -> pd.DataFrame:
+    """Score every room at Valmet L11 for the latest available date and save to predictions/."""
+    util = load_utilization()
+    clusters = load_or_train_clusters(util)
+    latest = util["utilization_date"].max()
+    scored, scored_date = score_for_date(util, latest, clusters)
+    scored["scored_date"] = scored_date
+    scored.to_parquet(PREDICTIONS_DIR / "cleaning_priority.parquet", index=False)
+    return scored
+
+
 def run():
     model = ensure_model()
     print("Computing cross-site Reliability Index…")
@@ -306,6 +318,8 @@ def run():
     build_portfolio_today(rri)
     print("Writing operations briefing…")
     build_operations_briefing(rri, dispatch)
+    print("Scoring cleaning priority (Valmet L11)…")
+    build_cleaning_priority()
     plot_reliability_cross_site(rri)
     plot_dispatch_table(dispatch, SITE_VALMET_L11)
     summary = build_summary(rri, dispatch)

@@ -44,23 +44,23 @@
       {
         "k_frac": 0.1,
         "k": 885,
-        "precision": 0.8677966101694915,
-        "recall": 0.1415668202764977,
-        "breaches_caught": 768
+        "precision": 0.8790960451977401,
+        "recall": 0.14341013824884793,
+        "breaches_caught": 778
       },
       {
         "k_frac": 0.2,
         "k": 1771,
-        "precision": 0.7865612648221344,
-        "recall": 0.2567741935483871,
-        "breaches_caught": 1393
+        "precision": 0.7882552230378317,
+        "recall": 0.25732718894009216,
+        "breaches_caught": 1396
       },
       {
         "k_frac": 0.3,
         "k": 2656,
-        "precision": 0.7601656626506024,
-        "recall": 0.37216589861751154,
-        "breaches_caught": 2019
+        "precision": 0.759789156626506,
+        "recall": 0.3719815668202765,
+        "breaches_caught": 2018
       }
     ]
   },
@@ -77,30 +77,30 @@
         {
           "k_frac": 0.05,
           "k": 443,
-          "precision": 0.6455981941309256,
-          "recall": 0.05271889400921659,
-          "breaches_caught": 286
+          "precision": 0.5711060948081265,
+          "recall": 0.04663594470046083,
+          "breaches_caught": 253
         },
         {
           "k_frac": 0.1,
           "k": 885,
-          "precision": 0.6361581920903955,
-          "recall": 0.10377880184331797,
-          "breaches_caught": 563
+          "precision": 0.5570621468926553,
+          "recall": 0.09087557603686636,
+          "breaches_caught": 493
         },
         {
           "k_frac": 0.2,
           "k": 1771,
-          "precision": 0.6346696781479391,
-          "recall": 0.2071889400921659,
-          "breaches_caught": 1124
+          "precision": 0.5714285714285714,
+          "recall": 0.1865437788018433,
+          "breaches_caught": 1012
         },
         {
           "k_frac": 0.3,
           "k": 2656,
-          "precision": 0.6216114457831325,
-          "recall": 0.304331797235023,
-          "breaches_caught": 1651
+          "precision": 0.5975150602409639,
+          "recall": 0.29253456221198154,
+          "breaches_caught": 1587
         }
       ]
     },
@@ -110,75 +110,75 @@
       "f1": 0.7997280350532598,
       "precision": 0.677547363031234,
       "recall": 0.975668202764977,
-      "brier": 0.2127055771911443,
+      "brier": 0.21270557719114433,
       "base_rate": 0.612786626002485,
       "precision_at_k": [
         {
           "k_frac": 0.05,
           "k": 443,
-          "precision": 0.7539503386004515,
-          "recall": 0.061566820276497694,
-          "breaches_caught": 334
+          "precision": 0.7697516930022573,
+          "recall": 0.06285714285714286,
+          "breaches_caught": 341
         },
         {
           "k_frac": 0.1,
           "k": 885,
-          "precision": 0.7175141242937854,
-          "recall": 0.11705069124423963,
-          "breaches_caught": 635
+          "precision": 0.7288135593220338,
+          "recall": 0.11889400921658987,
+          "breaches_caught": 645
         },
         {
           "k_frac": 0.2,
           "k": 1771,
-          "precision": 0.7086391869000565,
-          "recall": 0.2313364055299539,
-          "breaches_caught": 1255
+          "precision": 0.7193675889328063,
+          "recall": 0.23483870967741935,
+          "breaches_caught": 1274
         },
         {
           "k_frac": 0.3,
           "k": 2656,
-          "precision": 0.6950301204819277,
-          "recall": 0.34027649769585255,
-          "breaches_caught": 1846
+          "precision": 0.7127259036144579,
+          "recall": 0.3489400921658986,
+          "breaches_caught": 1893
         }
       ]
     },
     "logistic_regression": {
-      "roc_auc": 0.6811456210443676,
-      "pr_auc": 0.7466817164454738,
-      "f1": 0.800687553715134,
-      "precision": 0.6948738812042311,
-      "recall": 0.944516129032258,
-      "brier": 0.2089095733564313,
+      "roc_auc": 0.6912452075345892,
+      "pr_auc": 0.7538498515307903,
+      "f1": 0.8021523824378071,
+      "precision": 0.6951878886185455,
+      "recall": 0.9480184331797235,
+      "brier": 0.20787439362801235,
       "base_rate": 0.612786626002485,
       "precision_at_k": [
         {
           "k_frac": 0.05,
           "k": 443,
-          "precision": 0.8961625282167043,
-          "recall": 0.07317972350230414,
-          "breaches_caught": 397
+          "precision": 0.9006772009029346,
+          "recall": 0.07354838709677419,
+          "breaches_caught": 399
         },
         {
           "k_frac": 0.1,
           "k": 885,
-          "precision": 0.8666666666666667,
-          "recall": 0.14138248847926269,
-          "breaches_caught": 767
+          "precision": 0.8542372881355932,
+          "recall": 0.1393548387096774,
+          "breaches_caught": 756
         },
         {
           "k_frac": 0.2,
           "k": 1771,
-          "precision": 0.7758328627893846,
-          "recall": 0.25327188940092166,
-          "breaches_caught": 1374
+          "precision": 0.7735742518351214,
+          "recall": 0.25253456221198156,
+          "breaches_caught": 1370
         },
         {
           "k_frac": 0.3,
           "k": 2656,
-          "precision": 0.7435993975903614,
-          "recall": 0.3640552995391705,
-          "breaches_caught": 1975
+          "precision": 0.7439759036144579,
+          "recall": 0.3642396313364055,
+          "breaches_caught": 1976
         }
       ]
     }
@@ -245,7 +245,7 @@
       "count": 533
     }
   ],
-  "model_path": "/Users/floriangriffon/FloDev/luotea-hackathon/claude-shenanigans/outputs/models/sla_risk_model.pkl",
+  "model_path": "/home/nuria/Documents/luotea-hackathon/claude-shenanigans/outputs/models/sla_risk_model.pkl",
   "feature_importance": [
     {
       "feature": "sla_window_hours",
