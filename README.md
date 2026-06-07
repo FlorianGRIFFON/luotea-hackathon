@@ -9,7 +9,7 @@ We built a full data pipeline and ML system on top of Luotea's real facility dat
 ## Run the demo
 
 ```bash
-cd claude-shenanigans
+cd luotea-app
 make run
 ```
 
@@ -21,9 +21,9 @@ This will create the Python environment, train the model, build all artifacts, r
 |---|---|
 | Mac | `brew install python@3.11` |
 | Ubuntu/Debian | `sudo apt install python3.11 python3.11-venv` |
-| Windows | Download from [python.org](https://www.python.org/downloads/), then run `claude-shenanigans\setup.bat` |
+| Windows | Download from [python.org](https://www.python.org/downloads/), then run `luotea-app\setup.bat` |
 
-For full details see [`claude-shenanigans/README.md`](./claude-shenanigans/README.md).
+For full details see [`luotea-app/README.md`](./luotea-app/README.md).
 
 ---
 
@@ -31,7 +31,7 @@ For full details see [`claude-shenanigans/README.md`](./claude-shenanigans/READM
 
 ```
 luotea-hackathon/
-├── claude-shenanigans/    ← ML engine + interactive demo (start here)
+├── luotea-app/            ← ML engine + interactive demo (start here)
 ├── luotea-pipeline/       ← data pipeline: Bronze → Silver → Gold
 ├── luotea-data-analysis/  ← exploratory notebooks
 └── Luotea-Hackathon-2026/ ← original raw data provided by Luotea

@@ -15,7 +15,7 @@ Built on the Luotea medallion pipeline's Gold data for the **Luotea Hackathon 20
 The pipeline's Gold/Silver Parquet is **already built**, so this runs immediately:
 
 ```bash
-cd claude-shenanigans
+cd luotea-app
 make run
 ```
 
@@ -75,7 +75,7 @@ figures in [`outputs/figures/`](./outputs/figures/).
 ## 🗂️ Project structure
 
 ```
-claude-shenanigans/
+luotea-app/
   Makefile                 one-command workflows (demo / train / predict / app / test)
   requirements.txt         pinned deps
   src/

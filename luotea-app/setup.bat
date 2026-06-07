@@ -1,7 +1,7 @@
 @echo off
 REM Luotea Reliability Risk Engine — Windows setup + run
 REM Requires Python 3.11+: https://www.python.org/downloads/
-REM Run this from the claude-shenanigans folder.
+REM Run this from the luotea-app folder.
 
 set PYTHONPATH=.
 

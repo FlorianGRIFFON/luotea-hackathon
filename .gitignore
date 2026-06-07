@@ -15,18 +15,18 @@ __pycache__/
 # Agent prompt instructions (not project documentation)
 **/AGENT_PROMPT.md
 **/QA_AGENT_PROMPT.md
-claude-shenanigans/RUN.md
+luotea-app/RUN.md
 
 # luotea-pipeline
 luotea-pipeline/data/
 
-# claude-shenanigans generated outputs (run `make demo` to rebuild)
-claude-shenanigans/outputs/models/
-claude-shenanigans/outputs/figures/
-claude-shenanigans/outputs/metrics/
-claude-shenanigans/outputs/predictions/
-claude-shenanigans/outputs/operations_briefing.md
+# luotea-app generated outputs (run `make demo` to rebuild)
+luotea-app/outputs/models/
+luotea-app/outputs/figures/
+luotea-app/outputs/metrics/
+luotea-app/outputs/predictions/
+luotea-app/outputs/operations_briefing.md
 
-# claude-shenanigans local scratch notes
-claude-shenanigans/creative-extensions/CRAZY_IDEAS.md
-claude-shenanigans/creative-extensions/PWA_DECISION.md
+# luotea-app local scratch notes
+luotea-app/creative-extensions/CRAZY_IDEAS.md
+luotea-app/creative-extensions/PWA_DECISION.md
