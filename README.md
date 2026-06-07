@@ -6,6 +6,25 @@ We built a full data pipeline and ML system on top of Luotea's real facility dat
 
 ---
 
+## Get the data
+
+The raw data lives in a separate repository. Clone it into the root of this project before running anything:
+
+```bash
+git clone https://github.com/tmlehti3/Luotea-Hackathon-2026.git
+```
+
+Your folder structure should look like this afterwards:
+
+```
+luotea-hackathon/
+├── Luotea-Hackathon-2026/   ← cloned here
+├── luotea-app/
+└── ...
+```
+
+---
+
 ## Run the demo
 
 ```bash
