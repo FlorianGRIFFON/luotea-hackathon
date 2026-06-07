@@ -10,25 +10,44 @@ Built on the Luotea medallion pipeline's Gold data for the **Luotea Hackathon 20
 
 ---
 
-## ⚡ Quickstart (the whole flow in 2 commands)
+## ⚡ Quickstart — one command
 
 The pipeline's Gold/Silver Parquet is **already built**, so this runs immediately:
 
 ```bash
 cd claude-shenanigans
-make demo     # verify Gold ▶ train model ▶ build index & dispatch ▶ run 12 tests
-make app      # launch the interactive Streamlit demo
+make run
 ```
 
-No venv? Either reuse the pipeline's (`make demo` already does, by default) or:
+That's it. It will verify the Gold data, train the model, build all demo artifacts, run the tests, and open the Streamlit app at **http://localhost:8501**.
+
+`make run` / `setup.bat` create and install the venv automatically. The only prerequisite is **Python 3.11+**:
+
+| Platform | Install |
+|---|---|
+| **Mac** | `brew install python@3.11` (or 3.12 / 3.13) |
+| **Ubuntu/Debian** | `sudo apt install python3.11 python3.11-venv` |
+| **Windows** | Download from [python.org](https://www.python.org/downloads/), then run `setup.bat` instead of `make run` |
+
+**Other targets:**
+
+| Command | What it does |
+|---|---|
+| `make run` | Build everything + launch the app ← start here |
+| `make app` | Launch the app only (artifacts already built) |
+| `make demo` | Build everything without launching the UI |
+| `make train` | Train the SLA model only |
+| `make predict` | Build demo artifacts only |
+| `make test` | Run the test suite |
+| `make clean` | Delete generated outputs |
+
+**Shareable HTML snapshot** (no server needed):
 
 ```bash
-make setup    # create .venv + install pinned requirements
-make demo PYTHON=./.venv/bin/python
+python generate_html.py   # → outputs/luotea_demo.html
 ```
 
-Individual steps: `make verify | train | predict | test` — see `make` targets in the
-[`Makefile`](./Makefile) and the full workflow in [`docs/SCALING.md`](./docs/SCALING.md).
+Open in any browser, everything is embedded in a single file.
 
 ---
 

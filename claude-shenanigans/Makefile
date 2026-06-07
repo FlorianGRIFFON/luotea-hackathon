@@ -1,28 +1,42 @@
 # Luotea Reliability Risk Engine — one-command workflows.
-# Gold/Silver Parquet is already built, so `make demo` works out of the box.
+# Gold/Silver Parquet is already built, so `make run` works out of the box.
 #
-#   make verify     # check the pipeline's Gold data is present (read-only)
+#   make run        # ← start here: venv + deps + train + predict + test + app
+#   make app        # launch the Streamlit demo (artifacts already built)
+#   make demo       # verify -> train -> predict -> test  (no UI)
 #   make train      # train the SLA-breach model + write metrics/figures
 #   make predict    # build the Reliability Index + dispatch artifacts
-#   make app        # launch the interactive Streamlit demo
 #   make test       # run the test suite
-#   make demo       # verify -> train -> predict -> test  (everything but the UI)
-#
-# Uses the shared luotea-pipeline venv by default; override with `make PYTHON=...`.
+#   make clean      # remove generated outputs
 
-PYTHON ?= ../luotea-pipeline/.venv/bin/python
+PYTHON  ?= .venv/bin/python
+# Find Python 3.11+ — tries versioned names first, then falls back to python3/python
+PYTHON3 ?= $(shell \
+  for py in python3.13 python3.12 python3.11 python3 python; do \
+    ok=$$($$py -c "import sys; print(sys.version_info>=(3,11))" 2>/dev/null); \
+    if [ "$$ok" = "True" ]; then echo $$py; break; fi; \
+  done)
 export PYTHONPATH := .
 
-.PHONY: demo all verify pipeline train predict artifacts app test setup clean
+.PHONY: run demo all verify pipeline train predict artifacts app test setup clean
 
-demo: verify train predict test ## full flow except the UI
+# auto-create venv on first run
+.venv/bin/python:
+	@test -n "$(PYTHON3)" || (echo "ERROR: Python 3.11+ not found. Install it first:\n  Mac:   brew install python@3.11\n  Linux: sudo apt install python3.11 python3.11-venv\n  Win:   use WSL2 or https://python.org/downloads" && exit 1)
+	$(PYTHON3) -m venv .venv
+	.venv/bin/python -m pip install --upgrade pip -q
+	.venv/bin/python -m pip install -r requirements.txt -q
+	@echo "Venv ready."
+
+run: .venv/bin/python verify train predict test app ## ← one command: build everything and open the demo
+
+demo: .venv/bin/python verify train predict test ## full flow except the UI
 	@echo ""
 	@echo "Done. Launch the demo with:  make app"
 
 all: demo
 
-setup: ## create a local venv and install pinned deps (optional; pipeline venv works too)
-	python3 -m venv .venv && ./.venv/bin/pip install -U pip && ./.venv/bin/pip install -r requirements.txt
+setup: .venv/bin/python ## create venv and install deps
 
 verify: ## confirm the upstream Gold data exists — does NOT run the pipeline
 	@$(PYTHON) -c "from pathlib import Path; \
