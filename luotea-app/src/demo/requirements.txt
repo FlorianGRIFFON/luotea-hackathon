@@ -1,0 +1,2 @@
+# Picked up when main file is luotea-app/src/demo/app.py (Streamlit search order #1).
+-r ../../requirements.txt

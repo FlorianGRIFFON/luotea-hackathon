@@ -1,0 +1,2 @@
+# Streamlit Community Cloud installs from repo root by default.
+-r luotea-app/requirements.txt

@@ -14,7 +14,13 @@ then the analytics behind them:
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
+
+# Streamlit Cloud often runs with cwd = repo root; Makefile sets PYTHONPATH locally.
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 import altair as alt
 import pandas as pd
@@ -22,8 +28,6 @@ import polars as pl
 import streamlit as st
 
 from src.config import SILVER_DIR
-
-ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "outputs"
 FIG = OUT / "figures"
 PRED = OUT / "predictions"
